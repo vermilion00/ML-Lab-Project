@@ -11,7 +11,10 @@ HINT_TEXT = {
     "save_button": "Click to save the extracted features to a specified location",
     "file_path_label": "Shows the selected file path",
     "progress_label": "Shows the progress on the currently running process",
-    "hint_label": "Shows helpful hints"
+    "hint_label": "Shows helpful hints",
+    "read_csv": "Loaded features from CSV file",
+    "no_files_found": "No audio or csv files found in directory",
+    "extraction": "Extraction Done"
 }
 
 HEADER = (
@@ -81,5 +84,8 @@ OVERWRITE_FAILED_MSG = "Failed to save the file, as the file you're trying to ov
 NO_DATA_MSG = "No data to save, extract some files first!"
 NO_FILES_MSG = "No files selected, select some files to extract the features from first!"
 READ_CSV_FAILED_MSG = "Failed to read CSV file, make sure it's in the correct format!"
+MALFORMED_CSV_MSG = "CSV is malformed, make sure the features are laid out correctly!"
+ALREADY_EXTRACTED_MSG = "The currently loaded audio files have already been extracted. Do you really want to extract their features again?"
+ALREADY_SAVED_MSG = "The currently loaded features have already been saved. Would you like to save them again?"
 
 EXTRACTION_STEPS = 7

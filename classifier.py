@@ -7,11 +7,12 @@
 # TODO:
 # What is harmony and perceptr?
 # How is the duration calculated in the dataset?
-# Is it important that the calculated values differ slightly from the dataset values
-# Make the path area a scrollable area with a max height and set width
+# Is it important that the calculated values differ slightly from the dataset values?
 # Writing 100 rows of csv is instant, but maybe add progress bar to saveCSV function
 # Rewrite functions to not need global variables
 # Play around with ttk styling
+# Glob files in single lookup instead of looping over each ending
+# Fix being able to scroll up past first path for some reason
 
 from constants import *
 import numpy as np
@@ -41,6 +42,16 @@ from glob import glob
 #     #Set folder to be hidden
 #     ret = windll.kernel32.SetFileAttributesW(SAVE_DIR, 0x02)
 
+#Function list for use in startExtraction function
+FEATURE_FUNCTION_LIST = [
+    feature.chroma_stft,
+    feature.spectral_centroid,
+    feature.spectral_bandwidth,
+    feature.spectral_rolloff,
+    #harmony is not a thing, librosa.effects.harmonic?
+    #What is perceptr?
+]
+
 #MARK: Threading events
 extract_flag = threading.Event()
 load_file_flag = threading.Event()
@@ -68,18 +79,25 @@ def updateProgress(process):
         progress_bar.pack(fill=X, padx=5)
 
     num = int(progress/total_progress*100)
+    #Process is still ongoing
     if num < 100:
         progress_number.set(str(num) + '%')
         progress_bar['value'] = num
+    #Process is done
     else:
         #Limit the max progress value to 100
-        progress_number.set("100%")
-        progress_bar["value"] = 100
-        #Hide progress label and bar, and show hints again
-        time.sleep(0.5)
+        # progress_number.set("100%")
+        # progress_bar["value"] = 100
+        #Sleep for a short time keep the progress completed messages up
+        # time.sleep(0.5)
+        #Hide progress label and bar
         progress_frame.pack_forget()
         progress_bar.pack_forget()
+        #Set the hint label to say that the process is done
+        hint_text.set(HINT_TEXT[process])
+        #Show the hint label again
         hint_label.pack(side=BOTTOM, padx=2, pady=(0,2))
+        #Reset the progress
         progress = 0
 
 #MARK: Thread 1 handler
@@ -111,8 +129,8 @@ def loadFileHelper(type):
 
 #MARK: Load Files
 def loadFiles(type):
-    # global file_path
     global paths
+    global extracted
     match type:
         case "audio":
             #Which file types should be selectable?
@@ -127,8 +145,10 @@ def loadFiles(type):
             )
             #If multiple files are added, show them separated by newlines
             #Only update file path if selection is made
+            #Check for empty string since it returns nothing when cancelled, instead of an empty list
             if file_paths != "":
                 file_path_str = ""
+                #Add newlines at the end of each path for the gui display
                 for i in file_paths:
                     file_path_str += i + "\n"
                 #Remove the last newline character
@@ -137,8 +157,13 @@ def loadFiles(type):
                 file_path.set(file_path_str)
                 #Save the tuple globally to make iterating easier
                 paths = file_paths
+                #Since new data is available, reset extracted flag
+                extracted = False
+                #Enable the extract button, since audio paths are now available
+                extract_button.config(state=NORMAL)
+                #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
+                save_button.config(state=DISABLED)
         case "csv":
-            #TODO: Make this work
             filetypes = (
                 ('Pre-extracted features', '*.csv'),
                 ('All files', '*.*')
@@ -150,10 +175,9 @@ def loadFiles(type):
             )
             if file_path_str != "":
                 file_path.set(file_path_str)
-                #Reset selected audio file paths if csv is selected
                 paths = []
-            #TODO: Read contents into memory, so they have the same shape as extracted features
-            readCSV(file_path_str)
+                #Reset selected audio file paths if csv is selected
+                readCSV(file_path_str)
         case "folder":
             #Unfortunately tkinter can't open a window to select either a file or a folder
             file_path_str = fd.askdirectory(
@@ -162,9 +186,10 @@ def loadFiles(type):
             #Check if the file path isn't empty
             if file_path_str != "":
                 file_path_str += '/'
-                file_path.set(file_path_str)
+                # file_path.set(file_path_str)
                 file_paths = []
                 #Look for all allowed filetypes in the folder and add them to path list
+                #TODO: glob files in single lookup instead of looping over each ending
                 for filetype in ('*.wav', '*.mp3', '*.flac', '*.ogg'):
                     file_paths += glob(file_path_str + filetype)
                 #If file path list is not empty, save and display new paths
@@ -175,7 +200,16 @@ def loadFiles(type):
                         new_path = i.replace('\\', '/')
                         temp_paths.append(new_path)
                     file_paths = temp_paths
+                    #Save the tuple globally to make iterating easier
+                    paths = file_paths
+                    #Since new data is available, reset extracted flag
+                    extracted = False
+                    #Enable the extract button, since audio paths are now available
+                    extract_button.config(state=NORMAL)
+                    #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
+                    save_button.config(state=DISABLED)
                     file_path_str = ""
+                    #Add newlines add the end of each path for the gui display
                     for i in file_paths:
                         file_path_str += i + "\n"
                     #Remove the last newline character
@@ -185,46 +219,75 @@ def loadFiles(type):
                 else:
                     #Look for the csv file in the directory
                     file_paths += glob(file_path_str + '*.csv')
-                    #Only take the first csv, since all tracks should be in one
-                    file_path_str = file_paths[0].replace('\\', '/')
-                    file_paths = list(file_path_str)
-                    #TODO: Read csv
-                    readCSV(file_path_str)
+                    #Check if a csv file has been found
+                    if file_paths != []:
+                        #Reset audio file paths since features are now read from csv instead
+                        paths = []
+                        #Only take the first csv, since all tracks should be in one
+                        file_path_str = file_paths[0].replace('\\', '/')
+                        file_paths = list(file_path_str)
+                        readCSV(file_path_str)
+                    else:
+                        hint_text.set(HINT_TEXT["no_files_found"])
                 #Set the file path string in the gui
                 file_path.set(file_path_str)
-                #Save the tuple globally to make iterating easier
-                paths = file_paths
 
-#TODO: make this a thing
-#MARK: Load CSV
+#MARK: Read CSV
 def readCSV(csv_path):
     global result_list
+    global saved
     #Reset the result list
     result_list = []
     #Catch possible error
+    #TODO: Fix
+    paths = []
     try:
         #Open the csv file
         with open(csv_path) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             line_count = 0
             for row in csv_reader:
+                #Basic check if csv is formed correctly
+                #TODO: Implement more checks
+                if len(row) != len(HEADER):
+                    print(MALFORMED_CSV_MSG)
+                    mb.showerror(title="Malformed CSV", message=MALFORMED_CSV_MSG)
+                    #Reset the already made result list, since it's malformed
+                    result_list = []
+                    #Break out of loop to abort reading csv
+                    break
                 #Ignore header row
-                if line_count != 0:
+                elif line_count != 0:
                     #Each row is a list of all features of that track, so just add it to list
                     result_list.append(row)
                 line_count += 1
+            #Show a message that the features have been loaded
+            hint_text.set(HINT_TEXT["read_csv"])
+            #Since new features have been loaded, reset the saved flag
+            saved = False
+            #Enable the save button, since features are now available to save
+            save_button.config(state=NORMAL)
+            #Disable the extract button, since old audio files have now been unloaded
+            extract_button.config(state=DISABLED)
     except:
         #Error when opening the csv file
         print(READ_CSV_FAILED_MSG)
         mb.showerror(title="Failed to read file", message=READ_CSV_FAILED_MSG)
     #TODO: Remove this
-    print(result_list)
+    # print(result_list)
 
 
 #MARK: Save csv
+#Open file dialog to choose the directory
 def saveCSV():
+    global saved
     global result_list
-    #Open file dialog to choose the directory
+    #If the features have already been saved, ask if they should be saved again
+    if saved:
+        answer = mb.askyesno(title="Save again?", message=ALREADY_SAVED_MSG)
+        #If the answer is No, abort the function call
+        if answer == False:
+            return
     if result_list != []:
         filetype = [('CSV file', '*.csv'),
                     ('All files', '*.*')]
@@ -244,6 +307,8 @@ def saveCSV():
                     writer.writerow(HEADER)
                     writer.writerows(result_list)
                     print("Done writing file")
+                #Set the saved flag
+                saved = True
             except:
                 print(OVERWRITE_FAILED_MSG)
                 mb.showerror(title="Failed to save file", message=OVERWRITE_FAILED_MSG)
@@ -255,16 +320,14 @@ def saveCSV():
 def startExtraction():
     global paths
     global result_list
-    FEATURE_FUNCTION_LIST = [
-        feature.chroma_stft,
-        feature.spectral_centroid,
-        feature.spectral_bandwidth,
-        feature.spectral_rolloff,
-        #harmony is not a thing, librosa.effects.harmonic?
-        #What is perceptr?
-    ]
-
-    #Check if files are selected
+    global extracted
+    #If the files have already been extracted, ask if they should be extracted again
+    if extracted:
+        answer = mb.askyesno(title="Extract again?", message=ALREADY_EXTRACTED_MSG)
+        #If the answer is No, abort the function call
+        if answer == False:
+            return
+    #Check if audio files are selected
     if paths != [] and paths != ():
         result_list = []
         #Iterate over every selected path and extract the audio features
@@ -272,6 +335,7 @@ def startExtraction():
             #load the audio file using librosa
             #y is a time-series-array, sr is the sample rate
             y, sr = librosa.load(i, sr=None)
+            #Update the progress text and bar (needs to be called each progress step)
             updateProgress("extraction")
             #Loop through list of functions and add result to list
             feature_list_mean = [np.mean(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
@@ -303,8 +367,10 @@ def startExtraction():
             #Append feature list of current track to complete result list, incase multiple tracks are selected
             result_list.append(feature_list)
             updateProgress("extraction")
-        #TODO: Remove this
-        # print(result_list)
+            #Enable the save csv button, since features are now available
+            save_button.config(state=NORMAL)
+            #Set the extracted flag
+            extracted = True
     #No files are selected
     else:
         mb.showerror(title="No files selected", message=NO_FILES_MSG)
@@ -331,6 +397,9 @@ progress_number = StringVar()
 #Progress bar progress
 progress = 0
 total_progress = 0
+#
+extracted = False
+saved = False
 
 #MARK: Buttons
 #Make a new frame to group the related buttons together
@@ -349,10 +418,10 @@ load_folder_button.pack(side=LEFT, padx=1, pady=2)
 load_csv_file_button = ttk.Button(button_frame, text="Load Features", command=lambda m="csv": loadFileHelper(m), padding="2 2 2 2")
 load_csv_file_button.bind('<Enter>', lambda a, m="load_csv_file_button": hint_text.set(HINT_TEXT[m]))
 load_csv_file_button.pack(side=LEFT, padx=1, pady=2)
-extract_button = ttk.Button(button_frame, text="Extract features", command=extract_flag.set, padding="2 2 2 2")
+extract_button = ttk.Button(button_frame, text="Extract features", command=extract_flag.set, padding="2 2 2 2", state=DISABLED)
 extract_button.bind('<Enter>', lambda a, m="extract_button": hint_text.set(HINT_TEXT[m]))
 extract_button.pack(side=LEFT, padx=1, pady=2)
-save_button = ttk.Button(button_frame, text="Save CSV", command=save_file_flag.set, padding="2 2 2 2")
+save_button = ttk.Button(button_frame, text="Save CSV", command=save_file_flag.set, padding="2 2 2 2", state=DISABLED)
 save_button.bind('<Enter>', lambda a, m="save_button": hint_text.set(HINT_TEXT[m]))
 save_button.pack(side=LEFT, padx=1, pady=2)
 

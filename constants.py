@@ -80,3 +80,4 @@ HEADER = (
 OVERWRITE_FAILED_MSG = "Failed to save the file, as the file you're trying to overwrite is likely opened already. Close the file before trying again!"
 NO_DATA_MSG = "No data to save, extract some files first!"
 NO_FILES_MSG = "No files selected, select some files to extract the features from first!"
+READ_CSV_FAILED_MSG = "Failed to read CSV file, make sure it's in the correct format!"

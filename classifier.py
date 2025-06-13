@@ -31,6 +31,7 @@ import librosa
 from librosa import feature
 from glob import glob
 
+#TODO: Remove this if not needed
 # #Make save folder if it doesn't exist
 # from os import makedirs, path, remove, name
 # if not path.exists(SAVE_DIR):
@@ -47,7 +48,8 @@ FEATURE_FUNCTION_LIST = [
     feature.chroma_stft,
     feature.spectral_centroid,
     feature.spectral_bandwidth,
-    feature.spectral_rolloff,
+    feature.spectral_rolloff
+    #TODO:
     #harmony is not a thing, librosa.effects.harmonic?
     #What is perceptr?
 ]
@@ -101,7 +103,7 @@ def updateProgress(process):
         progress = 0
 
 #MARK: Thread 1 handler
-#Handles several functions on one thread
+#Handles several functions running on one thread
 #Since all these functions can't run concurrently, they can share a thread
 def thread1_handler():
     global file_type
@@ -128,9 +130,10 @@ def loadFileHelper(type):
     load_file_flag.set()
 
 #MARK: Load Files
+#Loads the selected files/folder
 def loadFiles(type):
     global paths
-    global extracted
+    global already_extracted
     match type:
         case "audio":
             #Which file types should be selectable?
@@ -158,7 +161,7 @@ def loadFiles(type):
                 #Save the tuple globally to make iterating easier
                 paths = file_paths
                 #Since new data is available, reset extracted flag
-                extracted = False
+                already_extracted = False
                 #Enable the extract button, since audio paths are now available
                 extract_button.config(state=NORMAL)
                 #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
@@ -203,7 +206,7 @@ def loadFiles(type):
                     #Save the tuple globally to make iterating easier
                     paths = file_paths
                     #Since new data is available, reset extracted flag
-                    extracted = False
+                    already_extracted = False
                     #Enable the extract button, since audio paths are now available
                     extract_button.config(state=NORMAL)
                     #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
@@ -233,9 +236,10 @@ def loadFiles(type):
                 file_path.set(file_path_str)
 
 #MARK: Read CSV
+#Reads the features in a csv into memory
 def readCSV(csv_path):
     global result_list
-    global saved
+    global already_saved
     #Reset the result list
     result_list = []
     #Catch possible error
@@ -264,7 +268,7 @@ def readCSV(csv_path):
             #Show a message that the features have been loaded
             hint_text.set(HINT_TEXT["read_csv"])
             #Since new features have been loaded, reset the saved flag
-            saved = False
+            already_saved = False
             #Enable the save button, since features are now available to save
             save_button.config(state=NORMAL)
             #Disable the extract button, since old audio files have now been unloaded
@@ -278,12 +282,12 @@ def readCSV(csv_path):
 
 
 #MARK: Save csv
-#Open file dialog to choose the directory
+#Opens file dialog to choose the directory and name to save to
 def saveCSV():
-    global saved
+    global already_saved
     global result_list
     #If the features have already been saved, ask if they should be saved again
-    if saved:
+    if already_saved:
         answer = mb.askyesno(title="Save again?", message=ALREADY_SAVED_MSG)
         #If the answer is No, abort the function call
         if answer == False:
@@ -308,7 +312,7 @@ def saveCSV():
                     writer.writerows(result_list)
                     print("Done writing file")
                 #Set the saved flag
-                saved = True
+                already_saved = True
             except:
                 print(OVERWRITE_FAILED_MSG)
                 mb.showerror(title="Failed to save file", message=OVERWRITE_FAILED_MSG)
@@ -317,22 +321,24 @@ def saveCSV():
         mb.showerror(title="No data available", message=NO_DATA_MSG)
         
 #MARK: Extract
+#Extracts the features from the loaded audio files
 def startExtraction():
     global paths
     global result_list
-    global extracted
+    global already_extracted
     #If the files have already been extracted, ask if they should be extracted again
-    if extracted:
+    if already_extracted:
         answer = mb.askyesno(title="Extract again?", message=ALREADY_EXTRACTED_MSG)
         #If the answer is No, abort the function call
         if answer == False:
             return
     #Check if audio files are selected
-    if paths != [] and paths != ():
+    #TODO: Check if paths can be a tuple here - prob not relevant since button is locked anyway
+    if paths != []:
         result_list = []
         #Iterate over every selected path and extract the audio features
         for i in paths:
-            #load the audio file using librosa
+            #Load the audio file using librosa
             #y is a time-series-array, sr is the sample rate
             y, sr = librosa.load(i, sr=None)
             #Update the progress text and bar (needs to be called each progress step)
@@ -370,7 +376,7 @@ def startExtraction():
             #Enable the save csv button, since features are now available
             save_button.config(state=NORMAL)
             #Set the extracted flag
-            extracted = True
+            already_extracted = True
     #No files are selected
     else:
         mb.showerror(title="No files selected", message=NO_FILES_MSG)
@@ -381,14 +387,8 @@ def startExtraction():
 thread1 = threading.Thread(target=thread1_handler, daemon=True)
 thread1.start()
 
-#MARK: Tkinter
-root = Tk()
-root.title('Music Genre Classifier')
-root.minsize(width=428, height=145)
-root.geometry("428x300")
-
 file_path = StringVar()
-paths = ()
+paths = []
 result_list = []
 file_type = ""
 hint_text = StringVar(value=HINT_TEXT["program_start"])
@@ -398,38 +398,45 @@ progress_number = StringVar()
 progress = 0
 total_progress = 0
 #
-extracted = False
-saved = False
+already_extracted = False
+already_saved = False
+
+#MARK: Tkinter config
+#The base state of every gui element is configured here
+root = Tk()
+root.title('Music Genre Classifier')
+root.minsize(width=428, height=145)
+root.geometry("428x300")
 
 #MARK: Buttons
 #Make a new frame to group the related buttons together
 button_frame = ttk.Frame(root, padding="2 0 2 0")
 button_frame.pack(anchor=W)
 #Create a button widget
-load_file_button = ttk.Button(button_frame, text="Load Audio", command=lambda m="audio": loadFileHelper(m), padding="2 2 2 2")
+load_file_button = ttk.Button(button_frame, text="Load Audio", command=lambda: loadFileHelper("audio"), padding="2 2 2 2")
 #Set an event to happen if the mouse cursor hovers over the load file button
-load_file_button.bind('<Enter>', lambda a, m="load_file_button": hint_text.set(HINT_TEXT[m]))
+load_file_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_file_button"]))
 #Pack the button into the button frame with some padding
 load_file_button.pack(side=LEFT, padx=1, pady=2)
 #Same procedure for the other buttons
 load_folder_button = ttk.Button(button_frame, text="Load Folder", command=lambda m="folder": loadFileHelper(m), padding="2 2 2 2")
-load_folder_button.bind('<Enter>', lambda a, m="load_folder_button": hint_text.set(HINT_TEXT[m]))
+load_folder_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_folder_button"]))
 load_folder_button.pack(side=LEFT, padx=1, pady=2)
 load_csv_file_button = ttk.Button(button_frame, text="Load Features", command=lambda m="csv": loadFileHelper(m), padding="2 2 2 2")
-load_csv_file_button.bind('<Enter>', lambda a, m="load_csv_file_button": hint_text.set(HINT_TEXT[m]))
+load_csv_file_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_csv_file_button"]))
 load_csv_file_button.pack(side=LEFT, padx=1, pady=2)
 extract_button = ttk.Button(button_frame, text="Extract features", command=extract_flag.set, padding="2 2 2 2", state=DISABLED)
-extract_button.bind('<Enter>', lambda a, m="extract_button": hint_text.set(HINT_TEXT[m]))
+extract_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["extract_button"]))
 extract_button.pack(side=LEFT, padx=1, pady=2)
 save_button = ttk.Button(button_frame, text="Save CSV", command=save_file_flag.set, padding="2 2 2 2", state=DISABLED)
-save_button.bind('<Enter>', lambda a, m="save_button": hint_text.set(HINT_TEXT[m]))
+save_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["save_button"]))
 save_button.pack(side=LEFT, padx=1, pady=2)
 
 #MARK: Paths
 #Scrolling path frame
 file_frame = ttk.Frame(root, padding="2 0 2 0")
 #Set the hint text on a mouse hover event
-file_frame.bind('<Enter>', lambda a, m="file_path_label": hint_text.set(HINT_TEXT[m]))
+file_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["file_path_label"]))
 file_frame.pack(padx=2, anchor=W, fill=BOTH, expand=True)
 #This label shows the text above the paths
 file_label = ttk.Label(file_frame, text="Selected file path(s):")
@@ -449,7 +456,7 @@ file_path_label.pack(padx=5, pady=2, expand=True)
 
 #MARK: Hint label
 hint_label = ttk.Label(root, textvariable=hint_text)
-hint_label.bind('<Enter>', lambda a, m="hint_label": hint_text.set(HINT_TEXT[m]))
+hint_label.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["hint_label"]))
 hint_label.pack(padx=2, pady=(0,2))
 
 #MARK: Progress
@@ -463,6 +470,7 @@ progress_bar = ttk.Progressbar(style="TProgressbar")
 
 root.mainloop()
 
+#TODO: Remove this if not needed
 # rf = RandomForestClassifier(n_estimators=1000, max_depth=10, random_state=0)
 # cbc = cb.CatBoostClassifier(verbose=0, eval_metric='Accuracy', loss_function='MultiClass')
 # xgb = XGBClassifier(n_estimators=1000, learning_rate=0.05)

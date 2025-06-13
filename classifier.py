@@ -1,11 +1,8 @@
-#Allow loading music file or pre-extracted features
 #Show spectrogram of file to be classified?
 #Allow training the model via gui
 #Input training parameters, add button to reset to default params
 #Choose between different models
 #Use askopenfilenames to allow selecting multiple files, then iterate through all of them
-#Save extracted features as csv, add button to save to specified location
-#Add progress bar or progress text field
 
 # TODO:
 # What is harmony and perceptr?
@@ -13,6 +10,8 @@
 # Is it important that the calculated values differ slightly from the dataset values
 # Make the path area a scrollable area with a max height and set width
 # Writing 100 rows of csv is instant, but maybe add progress bar to saveCSV function
+# Rewrite functions to not need global variables
+# Play around with ttk styling
 
 from constants import *
 import numpy as np
@@ -48,10 +47,40 @@ load_file_flag = threading.Event()
 save_file_flag = threading.Event()
 
 #MARK: Progress func
-def updateProgress(progress, total_progress):
+#Handles showing and hiding the progress bar and updating it
+def updateProgress(process):
+    global progress
+    global total_progress
+    global paths
     #Process name and 0% is set in function directly
+    progress += 1
+    #Check if this is the first call for this progress
+    if progress == 1:
+        match process:
+            case "extraction":
+                total_progress = EXTRACTION_STEPS * len(paths)
+                progress_text.set("Running extraction: ")
+        #Replace the hint label with the progress label and bar
+        hint_label.pack_forget()
+        progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2))
+        progress_number.set("0%")
+        #Progress bar expands automatically, don't set expand to true here
+        progress_bar.pack(fill=X, padx=5)
+
     num = int(progress/total_progress*100)
-    progress_number.set(str(num if num < 100 else 100) + '%')
+    if num < 100:
+        progress_number.set(str(num) + '%')
+        progress_bar['value'] = num
+    else:
+        #Limit the max progress value to 100
+        progress_number.set("100%")
+        progress_bar["value"] = 100
+        #Hide progress label and bar, and show hints again
+        time.sleep(0.5)
+        progress_frame.pack_forget()
+        progress_bar.pack_forget()
+        hint_label.pack(side=BOTTOM, padx=2, pady=(0,2))
+        progress = 0
 
 #MARK: Thread 1 handler
 #Handles several functions on one thread
@@ -237,63 +266,43 @@ def startExtraction():
 
     #Check if files are selected
     if paths != [] and paths != ():
-        #Replace the hint label with the progress label
-        hint_label.pack_forget()
-        progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2))
-        progress_text.set("Running Extraction: ")
-        progress_number.set("0%")
-        #Every path is divided into 7 steps
-        total_progress = len(paths) * 7
-        progress = 0
         result_list = []
         #Iterate over every selected path and extract the audio features
         for i in paths:
             #load the audio file using librosa
             #y is a time-series-array, sr is the sample rate
             y, sr = librosa.load(i, sr=None)
-            progress += 1
-            updateProgress(progress, total_progress)
+            updateProgress("extraction")
             #Loop through list of functions and add result to list
             feature_list_mean = [np.mean(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
             feature_list_var = [np.var(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
-            progress += 1
-            updateProgress(progress, total_progress)
+            updateProgress("extraction")
             #Calculate the mfccs separately, as it returns a list of 20 results, 
             #for which we need to calculate mean and var separately
             feature_list_mean += [np.mean(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
             feature_list_var += [np.var(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
-            progress += 1
-            updateProgress(progress, total_progress)
+            updateProgress("extraction")
             #Make a feature list, extract the filename from the path, and get length
             feature_list = [i[i.rindex('/')+1:], librosa.get_duration(y=y, sr=sr)]
             #Combine the lists so that mean and var alternate
             feature_list += [feat for pair in zip(feature_list_mean, feature_list_var) for feat in pair]
-            progress += 1
-            updateProgress(progress, total_progress)
+            updateProgress("extraction")
             #Insert the rms, tempo and crossing rate values here, since they don't take the sr as a parameter
             feature_list.insert(4, np.mean(feature.rms(y=y)))
             feature_list.insert(5, np.var(feature.rms(y=y)))
             feature_list.insert(12, np.mean(feature.zero_crossing_rate(y=y)))
             feature_list.insert(13, np.var(feature.zero_crossing_rate(y=y)))
-            progress += 1
-            updateProgress(progress, total_progress)
+            updateProgress("extraction")
             #Use index 0 since function gives back a list with one element
             feature_list.insert(14, feature.tempo(y=y, sr=sr)[0])
             #Since harmony and perceptr can't currently be extracted, set them to 0 to match dataset length
             for i in range(4): feature_list.insert(14, np.float32(0.0))
-            progress += 1
-            updateProgress(progress, total_progress)
+            updateProgress("extraction")
             #Get the label from the filename
             feature_list.append(feature_list[0][:feature_list[0].index('.')])
             #Append feature list of current track to complete result list, incase multiple tracks are selected
             result_list.append(feature_list)
-            progress += 1
-            updateProgress(progress, total_progress)
-
-        #Hide progress label and show hints again
-        time.sleep(0.5)
-        progress_frame.pack_forget()
-        hint_label.pack(side=BOTTOM, padx=2, pady=(0,2))
+            updateProgress("extraction")
         #TODO: Remove this
         # print(result_list)
     #No files are selected
@@ -309,10 +318,8 @@ thread1.start()
 #MARK: Tkinter
 root = Tk()
 root.title('Music Genre Classifier')
-root.minsize(width=428, height=140)
-root.geometry("428x400")
-# root.maxsize(width=800, height=500)
-# root.resizable(False, False)
+root.minsize(width=428, height=145)
+root.geometry("428x300")
 
 file_path = StringVar()
 paths = ()
@@ -321,6 +328,9 @@ file_type = ""
 hint_text = StringVar(value=HINT_TEXT["program_start"])
 progress_text = StringVar()
 progress_number = StringVar()
+#Progress bar progress
+progress = 0
+total_progress = 0
 
 #MARK: Buttons
 #Make a new frame to group the related buttons together
@@ -376,12 +386,11 @@ hint_label.pack(padx=2, pady=(0,2))
 #MARK: Progress
 #Extra frame for the progress text, hidden as long as no process is running
 progress_frame = ttk.Frame(root, padding="0 2 0 2")
-# progress_frame.bind('<Enter>', lambda a, m="progress_label": hint_text.set(HINT_TEXT[m]))
 progress_text_label = ttk.Label(progress_frame, textvariable=progress_text)
 progress_text_label.pack(side=LEFT)
 progress_number_label = ttk.Label(progress_frame, textvariable=progress_number)
 progress_number_label.pack(side=LEFT)
-
+progress_bar = ttk.Progressbar(style="TProgressbar")
 
 root.mainloop()
 

@@ -10,8 +10,8 @@
 # TODO:
 # What is harmony and perceptr?
 # How is the duration calculated in the dataset?
-# Is it important that the calculated values differ from the dataset values
-# Saving failed message pops up when file dialog is closed manually
+# Is it important that the calculated values differ slightly from the dataset values
+# Make the path area a scrollable area with a max height and set width
 
 from constants import *
 import numpy as np
@@ -47,10 +47,9 @@ save_file_flag = threading.Event()
 
 #MARK: Progress func
 def updateProgress(progress, total_progress):
+    #Process name and 0% is set in function directly
     num = int(progress/total_progress*100)
-    if num > 100:
-        num = 100
-    progress_number.set(str(num) + '%')
+    progress_number.set(str(num if num < 100 else 100) + '%')
 
 #MARK: Thread 1 handler
 #Handles several functions on one thread
@@ -73,6 +72,7 @@ def thread1_handler():
             time.sleep(0.1)
 
 #MARK: Load helper
+#A helper function, since I can't call a function and set the flag in a button action
 def loadFileHelper(type):
     global file_type
     file_type = type
@@ -122,6 +122,7 @@ def loadFiles(type):
                 #Reset selected audio file paths if csv is selected
                 paths = []
             #TODO: Read contents into memory, so they have the same shape as extracted features
+            # readCSV()
         case "folder":
             #Unfortunately tkinter can't open a window to select either a file or a folder
             file_path_str = fd.askdirectory(
@@ -135,24 +136,37 @@ def loadFiles(type):
                 #Look for all allowed filetypes in the folder and add them to path list
                 for filetype in ('*.wav', '*.mp3', '*.flac', '*.ogg'):
                     file_paths += glob(file_path_str + filetype)
-                temp_paths = []
-                #Replace the \ with a / for aesthetic reasons
-                for i in file_paths:
-                    new_path = i.replace('\\', '/')
-                    temp_paths.append(new_path)
-                file_paths = temp_paths
-                # print(file_paths)
                 #If file path list is not empty, save and display new paths
                 if file_paths != []:
+                    temp_paths = []
+                    #Replace the \ with a / for aesthetic reasons
+                    for i in file_paths:
+                        new_path = i.replace('\\', '/')
+                        temp_paths.append(new_path)
+                    file_paths = temp_paths
                     file_path_str = ""
                     for i in file_paths:
                         file_path_str += i + "\n"
                     #Remove the last newline character
                     if len(file_path_str) > 0:
                         file_path_str = file_path_str[:-1]
-                    file_path.set(file_path_str)
-                    #Save the tuple globally to make iterating easier
-                    paths = file_paths
+                #If file path is empty, look for csv file instead
+                else:
+                    #Look for the csv file in the directory
+                    file_paths += glob(file_path_str + '*.csv')
+                    #Only take the first csv, since all tracks should be in one
+                    file_path_str = file_paths[0].replace('\\', '/')
+                    file_paths = list(file_path_str)
+                    #TODO: Read csv
+                    # readCSV()
+                #Set the file path string in the gui
+                file_path.set(file_path_str)
+                #Save the tuple globally to make iterating easier
+                paths = file_paths
+
+#TODO: make this a thing
+def readCSV():
+    pass
         
 #MARK: Extract
 def startExtraction():
@@ -262,12 +276,6 @@ def saveCSV():
     else:   #If no data is available to save
         mb.showerror(title="No data available", message=NO_DATA_MSG)
         print(NO_DATA_MSG)
-
-#MARK: Load CSV
-#TODO: Make this a thing
-def loadCSV():
-    pass
-    
 
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still

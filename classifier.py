@@ -118,7 +118,13 @@ def thread1_handler():
     while True:
         if load_file_flag.is_set():
             load_file_flag.clear()
-            loadFiles(file_type)
+            match file_type:
+                case "audio":
+                    loadAudio()
+                case "csv":
+                    loadCSV()
+                case "folder":
+                    loadFolder()
         elif extract_flag.is_set():
             extract_flag.clear()
             startExtraction()
@@ -137,150 +143,154 @@ def loadFileHelper(type):
     file_type = type
     load_file_flag.set()
 
-#MARK: Load Files
-#Loads the selected files/folder
-def loadFiles(type):
+#MARK: Load audio
+def loadAudio():
     global paths
     global already_extracted
-    match type:
-        case "audio":
-            #Which file types should be selectable?
-            filetypes = (
-                ('Audio files', '*.wav *.mp3 *.flac *.ogg *.mat'),
-                ('All files', '*.*')
-            )
-            #Opens an explorer window and returns the file path and names
-            file_paths = fd.askopenfilenames(
-                title = 'Select the audio file you wish to classify',
-                filetypes = filetypes
-            )
-            #If multiple files are added, show them separated by newlines
-            #Only update file path if selection is made
-            #Check for empty string since it returns nothing when cancelled, instead of an empty list
-            if file_paths != "":
-                file_path_str = ""
-                #Add newlines at the end of each path for the gui display
-                for i in file_paths:
-                    file_path_str += i + "\n"
-                #Remove the last newline character
-                if len(file_path_str) > 0:
-                    file_path_str = file_path_str[:-1]
-                file_path.set(file_path_str)
-                #Save the tuple globally to make iterating easier
-                paths = file_paths
-                #Since new data is available, reset extracted flag
-                already_extracted = False
-                #Enable the extract button, since audio paths are now available
-                extract_button.config(state=NORMAL)
-                #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
-                save_button.config(state=DISABLED)
-        case "csv":
-            filetypes = (
-                ('Pre-extracted features', '*.csv'),
-                ('All files', '*.*')
-            )
-            #Only allow selecting one file here
-            file_path_str = fd.askopenfilename(
-                title = 'Select the pre-extracted feature file you wish to classify',
-                filetypes = filetypes
-            )
-            if file_path_str != "":
-                file_path.set(file_path_str)
-                paths = []
-                #Reset selected audio file paths if csv is selected
-                readCSV(file_path_str)
-        case "folder":
-            #Unfortunately tkinter can't open a window to select either a file or a folder
-            file_path_str = fd.askdirectory(
-                title='Select the directory containing the audio files you wish to classify'
-            )
-            #Check if the file path isn't empty
-            if file_path_str != "":
-                file_path_str += '/'
-                # file_path.set(file_path_str)
-                file_paths = []
-                #Look for all allowed filetypes in the folder and add them to path list
-                #TODO: glob files in single lookup instead of looping over each ending
-                for filetype in ('*.wav', '*.mp3', '*.flac', '*.ogg'):
-                    file_paths += glob(file_path_str + filetype)
-                #If file path list is not empty, save and display new paths
-                if file_paths != []:
-                    temp_paths = []
-                    #Replace the \ with a / for aesthetic reasons
-                    for i in file_paths:
-                        new_path = i.replace('\\', '/')
-                        temp_paths.append(new_path)
-                    file_paths = temp_paths
-                    #Save the tuple globally to make iterating easier
-                    paths = file_paths
-                    #Since new data is available, reset extracted flag
-                    already_extracted = False
-                    #Enable the extract button, since audio paths are now available
-                    extract_button.config(state=NORMAL)
-                    #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
-                    save_button.config(state=DISABLED)
-                    file_path_str = ""
-                    #Add newlines add the end of each path for the gui display
-                    for i in file_paths:
-                        file_path_str += i + "\n"
-                    #Remove the last newline character
-                    if len(file_path_str) > 0:
-                        file_path_str = file_path_str[:-1]
-                #If no audio files are detected but subfolders are available,
-                #ask if they should be scanned recursively to add all audio to path
-                #If file path is empty, look for csv file instead
-                else:
-                    #Look for the csv file in the directory
-                    file_paths += glob(file_path_str + '*.csv')
-                    #Check if a csv file has been found
-                    if file_paths != []:
-                        #Reset audio file paths since features are now read from csv instead
-                        paths = []
-                        #Only take the first csv, since all tracks should be in one
-                        file_path_str = file_paths[0].replace('\\', '/')
-                        file_paths = list(file_path_str)
-                        readCSV(file_path_str)
-                    #No audio or csv files found
-                    else:
-                        #Look if folder contains subfolders, empty list if none available
-                        if glob(file_path_str) != []:
-                            #If no audio files are detected but subfolders are available,
-                            #ask if they should be scanned recursively to add all audio to path
-                            if mb.askyesno(title="Search subfolders?", message=SEARCH_SUBFOLDERS_MSG):
-                                #Answered yes
-                                #TODO: Glob once instead of once for each filetype
-                                for filetype in ('*.wav', '*.mp3', '*.flac', '*.ogg'):
-                                    file_paths += glob(file_path_str + '**/*' + filetype, recursive=True)
-                                #If file path list is not empty, save and display new paths
-                                if file_paths != []:
-                                    temp_paths = []
-                                    #Replace the \ with a / for aesthetic reasons
-                                    for i in file_paths:
-                                        new_path = i.replace('\\', '/')
-                                        temp_paths.append(new_path)
-                                    file_paths = temp_paths
-                                    #Save the tuple globally to make iterating easier
-                                    paths = file_paths
-                                    #Since new data is available, reset extracted flag
-                                    already_extracted = False
-                                    #Enable the extract button, since audio paths are now available
-                                    extract_button.config(state=NORMAL)
-                                    #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
-                                    save_button.config(state=DISABLED)
-                                    file_path_str = ""
-                                    #Add newlines add the end of each path for the gui display
-                                    for i in file_paths:
-                                        file_path_str += i + "\n"
-                                    #Remove the last newline character
-                                    if len(file_path_str) > 0:
-                                        file_path_str = file_path_str[:-1]
-                                #No files found in subfolders
-                                else:
-                                    mb.showwarning(title="No files found", message="No files have been found in all subfolders.")
+    #Which file types should be selectable?
+    filetypes = (
+        ('Audio files', '*.wav *.mp3 *.flac *.ogg *.mat'),
+        ('All files', '*.*')
+    )
+    #Opens an explorer window and returns the file path and names
+    file_paths = fd.askopenfilenames(
+        title = 'Select the audio file you wish to classify',
+        filetypes = filetypes
+    )
+    #If multiple files are added, show them separated by newlines
+    #Only update file path if selection is made
+    #Check for empty string since it returns nothing when cancelled, instead of an empty list
+    if file_paths != "":
+        file_path_str = ""
+        #Add newlines at the end of each path for the gui display
+        for i in file_paths:
+            file_path_str += i + "\n"
+        #Remove the last newline character
+        if len(file_path_str) > 0:
+            file_path_str = file_path_str[:-1]
+        file_path.set(file_path_str)
+        #Save the tuple globally to make iterating easier
+        paths = file_paths
+        #Since new data is available, reset extracted flag
+        already_extracted = False
+        #Enable the extract button, since audio paths are now available
+        extract_button.config(state=NORMAL)
+        #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
+        save_button.config(state=DISABLED)
 
-                        hint_text.set(HINT_TEXT["no_files_found"])
-                #Set the file path string in the gui
-                file_path.set(file_path_str)
+#MARK: Load CSV
+def loadCSV():
+    global paths
+    filetypes = (
+        ('Pre-extracted features', '*.csv'),
+        ('All files', '*.*')
+    )
+    #Only allow selecting one file here
+    file_path_str = fd.askopenfilename(
+        title = 'Select the pre-extracted feature file you wish to classify',
+        filetypes = filetypes
+    )
+    if file_path_str != "":
+        file_path.set(file_path_str)
+        paths = []
+        #Reset selected audio file paths if csv is selected
+        readCSV(file_path_str)
+
+#MARK: Load Folder
+def loadFolder():
+    global paths
+    global already_extracted
+    #Unfortunately tkinter can't open a window to select either a file or a folder
+    file_path_str = fd.askdirectory(
+        title='Select the directory containing the audio files you wish to classify'
+    )
+    #Check if the file path isn't empty
+    if file_path_str != "":
+        file_path_str += '/'
+        # file_path.set(file_path_str)
+        file_paths = []
+        #Look for all allowed filetypes in the folder and add them to path list
+        #TODO: glob files in single lookup instead of looping over each ending
+        for filetype in ('*.wav', '*.mp3', '*.flac', '*.ogg'):
+            file_paths += glob(file_path_str + filetype)
+        #If file path list is not empty, save and display new paths
+        if file_paths != []:
+            temp_paths = []
+            #Replace the \ with a / for aesthetic reasons
+            for i in file_paths:
+                new_path = i.replace('\\', '/')
+                temp_paths.append(new_path)
+            file_paths = temp_paths
+            #Save the tuple globally to make iterating easier
+            paths = file_paths
+            #Since new data is available, reset extracted flag
+            already_extracted = False
+            #Enable the extract button, since audio paths are now available
+            extract_button.config(state=NORMAL)
+            #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
+            save_button.config(state=DISABLED)
+            file_path_str = ""
+            #Add newlines add the end of each path for the gui display
+            for i in file_paths:
+                file_path_str += i + "\n"
+            #Remove the last newline character
+            if len(file_path_str) > 0:
+                file_path_str = file_path_str[:-1]
+        #If no audio files are detected but subfolders are available,
+        #ask if they should be scanned recursively to add all audio to path
+        #If file path is empty, look for csv file instead
+        else:
+            #Look for the csv file in the directory
+            file_paths += glob(file_path_str + '*.csv')
+            #Check if a csv file has been found
+            if file_paths != []:
+                #Reset audio file paths since features are now read from csv instead
+                paths = []
+                #Only take the first csv, since all tracks should be in one
+                file_path_str = file_paths[0].replace('\\', '/')
+                file_paths = list(file_path_str)
+                readCSV(file_path_str)
+            #No audio or csv files found
+            else:
+                #Look if folder contains subfolders, empty list if none available
+                if glob(file_path_str) != []:
+                    #If no audio files are detected but subfolders are available,
+                    #ask if they should be scanned recursively to add all audio to path
+                    if mb.askyesno(title="Search subfolders?", message=SEARCH_SUBFOLDERS_MSG):
+                        #Answered yes
+                        #TODO: Glob once instead of once for each filetype
+                        for filetype in ('*.wav', '*.mp3', '*.flac', '*.ogg'):
+                            file_paths += glob(file_path_str + '**/*' + filetype, recursive=True)
+                        #If file path list is not empty, save and display new paths
+                        if file_paths != []:
+                            temp_paths = []
+                            #Replace the \ with a / for aesthetic reasons
+                            for i in file_paths:
+                                new_path = i.replace('\\', '/')
+                                temp_paths.append(new_path)
+                            file_paths = temp_paths
+                            #Save the tuple globally to make iterating easier
+                            paths = file_paths
+                            #Since new data is available, reset extracted flag
+                            already_extracted = False
+                            #Enable the extract button, since audio paths are now available
+                            extract_button.config(state=NORMAL)
+                            #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
+                            save_button.config(state=DISABLED)
+                            file_path_str = ""
+                            #Add newlines add the end of each path for the gui display
+                            for i in file_paths:
+                                file_path_str += i + "\n"
+                            #Remove the last newline character
+                            if len(file_path_str) > 0:
+                                file_path_str = file_path_str[:-1]
+                        #No files found in subfolders
+                        else:
+                            mb.showwarning(title="No files found", message="No files have been found in all subfolders.")
+
+                hint_text.set(HINT_TEXT["no_files_found"])
+        #Set the file path string in the gui
+        file_path.set(file_path_str)
 
 #MARK: Read CSV
 #Reads the features in a csv into memory
@@ -455,16 +465,16 @@ already_saved = False
 button_frame = ttk.Frame(root, padding="2 0 2 0")
 button_frame.pack(anchor=W)
 #Create a button widget
-load_file_button = ttk.Button(button_frame, text="Load Audio", command=lambda: loadFileHelper("audio"), padding="2 2 2 2")
+load_file_button = ttk.Button(button_frame, text="Load Audio", command=lambda:loadFileHelper("audio"), padding="2 2 2 2")
 #Set an event to happen if the mouse cursor hovers over the load file button
 load_file_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_file_button"]))
 #Pack the button into the button frame with some padding
 load_file_button.pack(side=LEFT, padx=1, pady=2)
 #Same procedure for the other buttons
-load_folder_button = ttk.Button(button_frame, text="Load Folder", command=lambda m="folder": loadFileHelper(m), padding="2 2 2 2")
+load_folder_button = ttk.Button(button_frame, text="Load Folder", command=lambda:loadFileHelper("folder"), padding="2 2 2 2")
 load_folder_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_folder_button"]))
 load_folder_button.pack(side=LEFT, padx=1, pady=2)
-load_csv_file_button = ttk.Button(button_frame, text="Load Features", command=lambda m="csv": loadFileHelper(m), padding="2 2 2 2")
+load_csv_file_button = ttk.Button(button_frame, text="Load Features", command=lambda:loadFileHelper("csv"), padding="2 2 2 2")
 load_csv_file_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_csv_file_button"]))
 load_csv_file_button.pack(side=LEFT, padx=1, pady=2)
 extract_button = ttk.Button(button_frame, text="Extract features", command=extract_flag.set, padding="2 2 2 2", state=DISABLED)

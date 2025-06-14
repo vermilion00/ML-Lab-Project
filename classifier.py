@@ -154,7 +154,7 @@ def loadAudio():
     )
     #Opens an explorer window and returns the file path and names
     file_paths = fd.askopenfilenames(
-        title = 'Select the audio file you wish to classify',
+        title = 'Select the audio file(s) you wish to load',
         filetypes = filetypes
     )
     #If multiple files are added, show them separated by newlines
@@ -235,7 +235,9 @@ def loadFolder():
                 file_path_str += i + "\n"
             #Remove the last newline character
             if len(file_path_str) > 0:
-                file_path_str = file_path_str[:-1]
+                file_path_str = file_path_str[:-1]  
+            #Set the file path string in the gui
+            file_path.set(file_path_str)
         #If no audio files are detected but subfolders are available,
         #ask if they should be scanned recursively to add all audio to path
         #If file path is empty, look for csv file instead
@@ -249,7 +251,10 @@ def loadFolder():
                 #Only take the first csv, since all tracks should be in one
                 file_path_str = file_paths[0].replace('\\', '/')
                 file_paths = list(file_path_str)
+                #Read the contents of the csv file into memory
                 readCSV(file_path_str)
+                #Set the file path string in the gui
+                file_path.set(file_path_str)
             #No audio or csv files found
             else:
                 #Look if folder contains subfolders, empty list if none available
@@ -284,13 +289,13 @@ def loadFolder():
                             #Remove the last newline character
                             if len(file_path_str) > 0:
                                 file_path_str = file_path_str[:-1]
+                            #Set the file path string in the gui
+                            file_path.set(file_path_str)
                         #No files found in subfolders
                         else:
                             mb.showwarning(title="No files found", message="No files have been found in all subfolders.")
 
                 hint_text.set(HINT_TEXT["no_files_found"])
-        #Set the file path string in the gui
-        file_path.set(file_path_str)
 
 #MARK: Read CSV
 #Reads the features in a csv into memory

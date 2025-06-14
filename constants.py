@@ -14,7 +14,12 @@ HINT_TEXT = {
     "hint_label": "Shows helpful hints",
     "read_csv": "Loaded features from CSV file",
     "no_files_found": "No audio or csv files found in directory",
-    "extraction": "Extraction Done"
+    "extraction": "Extraction Done",
+    "learning_rate": "Input the learning rate for the model as a float",
+    "epochs": "Input the epoch amount for the model as an Int",
+    "batch_size": "Input the batch size for the model as an Int",
+    "random_state": "Input the random state for the model as an Int",
+    "test_size": "Input the test size for the model as a float"
 }
 
 HEADER = (

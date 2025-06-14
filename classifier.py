@@ -14,6 +14,7 @@
 # Glob files in single lookup instead of looping over each ending
 # Fix being able to scroll up past first path for some reason
 # Add recursive path finder mode (to train the model from gui)
+# Add option to append to data with new selection, instead of overwriting it
 
 from constants import *
 import numpy as np
@@ -386,6 +387,7 @@ def startExtraction():
     global paths
     global result_list
     global already_extracted
+    global progress
     #If the files have already been extracted, ask if they should be extracted again
     if already_extracted and not mb.askyesno(title="Extract again?", message=ALREADY_EXTRACTED_MSG):
         #If the answer is no, abort the function call
@@ -398,41 +400,48 @@ def startExtraction():
         for i in paths:
             #Load the audio file using librosa
             #y is a time-series-array, sr is the sample rate
-            y, sr = librosa.load(i, sr=None)
-            #Update the progress text and bar (needs to be called each progress step)
-            updateProgress("extraction")
-            #Loop through list of functions and add result to list
-            feature_list_mean = [np.mean(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
-            feature_list_var = [np.var(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
-            updateProgress("extraction")
-            #Calculate the mfccs separately, as it returns a list of 20 results, 
-            #for which we need to calculate mean and var separately
-            feature_list_mean += [np.mean(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
-            feature_list_var += [np.var(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
-            updateProgress("extraction")
-            #Make a feature list, extract the filename from the path, and get length
-            feature_list = [i[i.rindex('/')+1:], librosa.get_duration(y=y, sr=sr)]
-            #Combine the lists so that mean and var alternate
-            feature_list += [feat for pair in zip(feature_list_mean, feature_list_var) for feat in pair]
-            updateProgress("extraction")
-            #Insert the rms, tempo and crossing rate values here, since they don't take the sr as a parameter
-            feature_list.insert(4, np.mean(feature.rms(y=y)))
-            feature_list.insert(5, np.var(feature.rms(y=y)))
-            feature_list.insert(12, np.mean(feature.zero_crossing_rate(y=y)))
-            feature_list.insert(13, np.var(feature.zero_crossing_rate(y=y)))
-            updateProgress("extraction")
-            #Use index 0 since function gives back a list with one element
-            feature_list.insert(14, feature.tempo(y=y, sr=sr)[0])
-            #Since harmony and perceptr can't currently be extracted, set them to 0 to match dataset length
-            for i in range(4): feature_list.insert(14, np.float32(0.0))
-            updateProgress("extraction")
-            #Get the label from the filename
-            feature_list.append(feature_list[0][:feature_list[0].index('.')])
-            #Append feature list of current track to complete result list, incase multiple tracks are selected
-            result_list.append(feature_list)
-            updateProgress("extraction")
-            #Set the extracted flag
-            already_extracted = True
+            try:
+                y, sr = librosa.load(i, sr=None)
+                #Update the progress text and bar (needs to be called each progress step)
+                updateProgress("extraction")
+                #Loop through list of functions and add result to list
+                feature_list_mean = [np.mean(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
+                feature_list_var = [np.var(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
+                updateProgress("extraction")
+                #Calculate the mfccs separately, as it returns a list of 20 results, 
+                #for which we need to calculate mean and var separately
+                feature_list_mean += [np.mean(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
+                feature_list_var += [np.var(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
+                updateProgress("extraction")
+                #Make a feature list, extract the filename from the path, and get length
+                feature_list = [i[i.rindex('/')+1:], librosa.get_duration(y=y, sr=sr)]
+                #Combine the lists so that mean and var alternate
+                feature_list += [feat for pair in zip(feature_list_mean, feature_list_var) for feat in pair]
+                updateProgress("extraction")
+                #Insert the rms, tempo and crossing rate values here, since they don't take the sr as a parameter
+                feature_list.insert(4, np.mean(feature.rms(y=y)))
+                feature_list.insert(5, np.var(feature.rms(y=y)))
+                feature_list.insert(12, np.mean(feature.zero_crossing_rate(y=y)))
+                feature_list.insert(13, np.var(feature.zero_crossing_rate(y=y)))
+                updateProgress("extraction")
+                #Use index 0 since function gives back a list with one element
+                feature_list.insert(14, feature.tempo(y=y, sr=sr)[0])
+                #Since harmony and perceptr can't currently be extracted, set them to 0 to match dataset length
+                for i in range(4): feature_list.insert(14, np.float32(0.0))
+                updateProgress("extraction")
+                #Get the label from the filename
+                feature_list.append(feature_list[0][:feature_list[0].index('.')])
+                #Append feature list of current track to complete result list, incase multiple tracks are selected
+                result_list.append(feature_list)
+                updateProgress("extraction")
+                #Set the extracted flag
+                already_extracted = True
+            #A file in the list could not be opened
+            except:
+                #Add the progress, since the updateProgress function expects 7 more calls to happen
+                progress += EXTRACTION_STEPS
+                print(f"A file at {i} could not be opened.")
+                mb.showerror(title="Invalid file", message=f"The file \"{i[i.rindex('/')+1:]}\" at path \"{i[:i.rindex('/')+1]}\" could not be opened. The extraction will continue without it.")
     #No files are selected
     else:
         mb.showerror(title="No files selected", message=NO_FILES_MSG)

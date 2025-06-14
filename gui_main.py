@@ -62,6 +62,7 @@ FEATURE_FUNCTION_LIST = [
 extract_flag = threading.Event()
 load_file_flag = threading.Event()
 save_file_flag = threading.Event()
+train_model_flag = threading.Event()
 
 #MARK: Progress func
 #Handles showing and hiding the progress bar and updating it
@@ -118,6 +119,7 @@ def updateProgress(process):
 #Since all these functions can't run concurrently, they can share a thread
 def thread1_handler():
     global file_type
+    global result_list
     while True:
         if load_file_flag.is_set():
             load_file_flag.clear()
@@ -134,6 +136,9 @@ def thread1_handler():
         elif save_file_flag.is_set():
             save_file_flag.clear()
             saveCSV()
+        elif train_model_flag.is_set():
+            train_model_flag.clear()
+            trainModelHelper(result_list)
         #Add other functions that run on the same thread as elif
         else:
             #If thread is not needed, sleep for 100ms before polling again
@@ -449,16 +454,34 @@ def startExtraction():
         mb.showerror(title="No files selected", message=NO_FILES_MSG)
         print(NO_FILES_MSG)
 
+#MARK: Train Model
+def trainModelHelper(result_list):
+    #Update the parameters with the respective entry values
+    c.learning_rate = learning_rate.get()
+    c.epochs = epochs.get()
+    c.batch_size = batch_size.get()
+    c.test_size = test_size.get()
+    c.random_state = random_state.get()
+    #Prep the data
+    c.prepareData(result_list)
+    #Build the model
+    c.buildModel()
+    #TODO: Update progress bar, lock buttons
+    #Post training updates in path screen, update descriptor
+    #Update wrap length of path screen according to dimensions
+    #Train the model
+    c.trainModel()
+
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still
 thread1 = threading.Thread(target=thread1_handler, daemon=True)
 thread1.start()
 
-#MARK: Tkinter config
+#MARK: Tk config
 #The base state of every gui element is configured here
 root = Tk()
 root.title('Music Genre Classifier')
-root.minsize(width=428, height=145)
+root.minsize(width=428, height=220)
 root.geometry("428x300")
 
 c = Classifier(epochs=100, learning_rate=0.0001, test_size=0.1)
@@ -546,13 +569,13 @@ random_state_entry = ttk.Entry(random_state_frame, textvariable=random_state, wi
 #MARK: Model buttons
 model_button_frame = ttk.Frame(model_frame, padding="2 2 2 2")
 model_button_frame.pack(anchor=N)
-prepare_data_button = ttk.Button(model_button_frame, text="Prep Data", command=lambda: c.prepareData(result_list))
+prepare_data_button = ttk.Button(model_button_frame, text="Prep Data", command=train_model_flag.set)
 # prepare_data_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["prepare_data_button"]))
 prepare_data_button.pack(side=LEFT)
-build_model_button = ttk.Button(model_button_frame, text="Build Model", command=c.buildModel)
+build_model_button = ttk.Button(model_button_frame, text="Build Model", command=train_model_flag.set)
 # build_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["build_model_button"]))
 build_model_button.pack(side=LEFT)
-train_model_button = ttk.Button(model_button_frame, text="Train Model", command=c.trainModel)
+train_model_button = ttk.Button(model_button_frame, text="Train Model", command=train_model_flag.set)
 # train_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["train_model_button"]))
 train_model_button.pack(side=LEFT)
 

@@ -13,6 +13,7 @@
 # Play around with ttk styling
 # Glob files in single lookup instead of looping over each ending
 # Fix being able to scroll up past first path for some reason
+# Add recursive path finder mode (to train the model from gui)
 
 from constants import *
 import numpy as np
@@ -71,14 +72,15 @@ def updateProgress(process):
     if progress == 1:
         match process:
             case "extraction":
+                #Set total progress to the amount of steps per path * amount of paths
                 total_progress = EXTRACTION_STEPS * len(paths)
                 progress_text.set("Running extraction: ")
+                #Lock the extraction button for the duration of the process
+                extract_button.config(state=DISABLED)
         #Replace the hint label with the progress label and bar
         hint_label.pack_forget()
-        progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2))
+        progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2), fill=X)
         progress_number.set("0%")
-        #Progress bar expands automatically, don't set expand to true here
-        progress_bar.pack(fill=X, padx=5)
 
     num = int(progress/total_progress*100)
     #Process is still ongoing
@@ -94,13 +96,19 @@ def updateProgress(process):
         # time.sleep(0.5)
         #Hide progress label and bar
         progress_frame.pack_forget()
-        progress_bar.pack_forget()
         #Set the hint label to say that the process is done
         hint_text.set(HINT_TEXT[process])
         #Show the hint label again
         hint_label.pack(side=BOTTOM, padx=2, pady=(0,2))
         #Reset the progress
         progress = 0
+        #Do something when process is finished
+        match process:
+            case "extraction":
+                #Unlock save button only after extraction has finished
+                save_button.config(state=NORMAL)
+                #Unlock extract button again
+                extract_button.config(state=NORMAL)
 
 #MARK: Thread 1 handler
 #Handles several functions running on one thread
@@ -218,6 +226,8 @@ def loadFiles(type):
                     #Remove the last newline character
                     if len(file_path_str) > 0:
                         file_path_str = file_path_str[:-1]
+                #If no audio files are detected but subfolders are available,
+                #ask if they should be scanned recursively to add all audio to path
                 #If file path is empty, look for csv file instead
                 else:
                     #Look for the csv file in the directory
@@ -230,7 +240,44 @@ def loadFiles(type):
                         file_path_str = file_paths[0].replace('\\', '/')
                         file_paths = list(file_path_str)
                         readCSV(file_path_str)
+                    #No audio or csv files found
                     else:
+                        #Look if folder contains subfolders, empty list if none available
+                        if glob(file_path_str) != []:
+                            #If no audio files are detected but subfolders are available,
+                            #ask if they should be scanned recursively to add all audio to path
+                            if mb.askyesno(title="Search subfolders?", message=SEARCH_SUBFOLDERS_MSG):
+                                #Answered yes
+                                #TODO: Glob once instead of once for each filetype
+                                for filetype in ('*.wav', '*.mp3', '*.flac', '*.ogg'):
+                                    file_paths += glob(file_path_str + '**/*' + filetype, recursive=True)
+                                #If file path list is not empty, save and display new paths
+                                if file_paths != []:
+                                    temp_paths = []
+                                    #Replace the \ with a / for aesthetic reasons
+                                    for i in file_paths:
+                                        new_path = i.replace('\\', '/')
+                                        temp_paths.append(new_path)
+                                    file_paths = temp_paths
+                                    #Save the tuple globally to make iterating easier
+                                    paths = file_paths
+                                    #Since new data is available, reset extracted flag
+                                    already_extracted = False
+                                    #Enable the extract button, since audio paths are now available
+                                    extract_button.config(state=NORMAL)
+                                    #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
+                                    save_button.config(state=DISABLED)
+                                    file_path_str = ""
+                                    #Add newlines add the end of each path for the gui display
+                                    for i in file_paths:
+                                        file_path_str += i + "\n"
+                                    #Remove the last newline character
+                                    if len(file_path_str) > 0:
+                                        file_path_str = file_path_str[:-1]
+                                #No files found in subfolders
+                                else:
+                                    mb.showwarning(title="No files found", message="No files have been found in all subfolders.")
+
                         hint_text.set(HINT_TEXT["no_files_found"])
                 #Set the file path string in the gui
                 file_path.set(file_path_str)
@@ -287,11 +334,9 @@ def saveCSV():
     global already_saved
     global result_list
     #If the features have already been saved, ask if they should be saved again
-    if already_saved:
-        answer = mb.askyesno(title="Save again?", message=ALREADY_SAVED_MSG)
+    if already_saved and not mb.askyesno(title="Save again?", message=ALREADY_SAVED_MSG):
         #If the answer is No, abort the function call
-        if answer == False:
-            return
+        return
     if result_list != []:
         filetype = [('CSV file', '*.csv'),
                     ('All files', '*.*')]
@@ -327,11 +372,9 @@ def startExtraction():
     global result_list
     global already_extracted
     #If the files have already been extracted, ask if they should be extracted again
-    if already_extracted:
-        answer = mb.askyesno(title="Extract again?", message=ALREADY_EXTRACTED_MSG)
-        #If the answer is No, abort the function call
-        if answer == False:
-            return
+    if already_extracted and not mb.askyesno(title="Extract again?", message=ALREADY_EXTRACTED_MSG):
+        #If the answer is no, abort the function call
+        return
     #Check if audio files are selected
     #TODO: Check if paths can be a tuple here - prob not relevant since button is locked anyway
     if paths != []:
@@ -373,8 +416,6 @@ def startExtraction():
             #Append feature list of current track to complete result list, incase multiple tracks are selected
             result_list.append(feature_list)
             updateProgress("extraction")
-            #Enable the save csv button, since features are now available
-            save_button.config(state=NORMAL)
             #Set the extracted flag
             already_extracted = True
     #No files are selected
@@ -387,26 +428,27 @@ def startExtraction():
 thread1 = threading.Thread(target=thread1_handler, daemon=True)
 thread1.start()
 
-file_path = StringVar()
-paths = []
-result_list = []
-file_type = ""
-hint_text = StringVar(value=HINT_TEXT["program_start"])
-progress_text = StringVar()
-progress_number = StringVar()
-#Progress bar progress
-progress = 0
-total_progress = 0
-#
-already_extracted = False
-already_saved = False
-
 #MARK: Tkinter config
 #The base state of every gui element is configured here
 root = Tk()
 root.title('Music Genre Classifier')
 root.minsize(width=428, height=145)
 root.geometry("428x300")
+
+file_path = StringVar()
+paths = []
+result_list = []
+file_type = ""
+#Initialise the hint text with the startup message
+hint_text = StringVar(value=HINT_TEXT["program_start"])
+progress_text = StringVar()
+progress_number = StringVar()
+#Progress bar progress
+progress = 0
+total_progress = 0
+#already done flags to ask if they should happen again
+already_extracted = False
+already_saved = False
 
 #MARK: Buttons
 #Make a new frame to group the related buttons together
@@ -462,11 +504,15 @@ hint_label.pack(padx=2, pady=(0,2))
 #MARK: Progress
 #Extra frame for the progress text, hidden as long as no process is running
 progress_frame = ttk.Frame(root, padding="0 2 0 2")
-progress_text_label = ttk.Label(progress_frame, textvariable=progress_text)
+progress_bar = ttk.Progressbar(progress_frame, style="TProgressbar")
+progress_bar.pack(fill=X, padx=5)
+#Extra frame to bundle the text labels together
+progress_text_frame = ttk.Frame(progress_frame)
+progress_text_frame.pack()
+progress_text_label = ttk.Label(progress_text_frame, textvariable=progress_text, justify=CENTER)
 progress_text_label.pack(side=LEFT)
-progress_number_label = ttk.Label(progress_frame, textvariable=progress_number)
+progress_number_label = ttk.Label(progress_text_frame, textvariable=progress_number, justify=CENTER)
 progress_number_label.pack(side=LEFT)
-progress_bar = ttk.Progressbar(style="TProgressbar")
 
 root.mainloop()
 

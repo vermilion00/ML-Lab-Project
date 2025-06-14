@@ -87,5 +87,6 @@ READ_CSV_FAILED_MSG = "Failed to read CSV file, make sure it's in the correct fo
 MALFORMED_CSV_MSG = "CSV is malformed, make sure the features are laid out correctly!"
 ALREADY_EXTRACTED_MSG = "The currently loaded audio files have already been extracted. Do you really want to extract their features again?"
 ALREADY_SAVED_MSG = "The currently loaded features have already been saved. Would you like to save them again?"
+SEARCH_SUBFOLDERS_MSG = "The selected folder contains no files to load, but subfolders have been detected. Would you like to recursively search all subfolders for audio files?"
 
 EXTRACTION_STEPS = 7

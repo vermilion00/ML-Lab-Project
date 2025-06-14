@@ -1,10 +1,8 @@
-import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
 from keras import *
-# from keras import Sequential
 from keras.api.layers import *
 
 #Label column index
@@ -12,7 +10,7 @@ FILENAME_INDEX = 0
 LENGTH_INDEX = 1
 LABEL_INDEX = 59
 class Classifier:
-    def __init__(self, learning_rate=0.001, epochs=100, test_size=0.2, random_state=42, batch_size=40):
+    def __init__(self, learning_rate=0.00011, epochs=120, test_size=0.1, random_state=111, batch_size=20):
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.test_size = test_size
@@ -31,7 +29,9 @@ class Classifier:
         df[LABEL_INDEX] = label_encoder.fit_transform(df[LABEL_INDEX])
         y = df[LABEL_INDEX]
         #Drop label, length and filename columns
-        x = df.drop([FILENAME_INDEX, LENGTH_INDEX, LABEL_INDEX], axis=1)
+        #Also remove the harmony and perceptr columns while they can't be extracted
+        #TODO: Remove the last indexes when harmony and perceptr can be extracted
+        x = df.drop([FILENAME_INDEX, LENGTH_INDEX, LABEL_INDEX, 14, 15, 16, 17], axis=1)
         #Scale the data
         columns = x.columns
         minmax = MinMaxScaler()
@@ -50,7 +50,8 @@ class Classifier:
         model = Sequential()
         #Input shape is 57, since the table has 60 columns and we dropped 3
         #TODO: Play around with layers
-        model.add(Input((57,), batch_size=self.batch_size))
+        model.add(Input((53,), batch_size=self.batch_size))
+        # model.add(Input((57,), batch_size=self.batch_size))
         model.add(Flatten())
         model.add(Dense(256, activation='relu'))
         model.add(BatchNormalization())
@@ -65,7 +66,6 @@ class Classifier:
         self.model = model
     
     def trainModel(self):
-        print("Started Training")
         history = self.model.fit(
                     x=self.x_train,
                     y=self.y_train,

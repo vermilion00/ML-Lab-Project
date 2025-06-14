@@ -93,5 +93,6 @@ MALFORMED_CSV_MSG = "CSV is malformed, make sure the features are laid out corre
 ALREADY_EXTRACTED_MSG = "The currently loaded audio files have already been extracted. Do you really want to extract their features again?"
 ALREADY_SAVED_MSG = "The currently loaded features have already been saved. Would you like to save them again?"
 SEARCH_SUBFOLDERS_MSG = "The selected folder contains no files to load, but subfolders have been detected. Would you like to recursively search all subfolders for audio files?"
+INVALID_INPUT_MSG = "One or more input fields contain invalid inputs! Take a look at the hint regarding each input field to see what field accepts what input, and use a dot as a decimal separator for floating point numbers."
 
 EXTRACTION_STEPS = 7

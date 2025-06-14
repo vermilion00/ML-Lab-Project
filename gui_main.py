@@ -16,6 +16,9 @@
 # Add recursive path finder mode (to train the model from gui)
 # Add option to append to data with new selection, instead of overwriting it
 # Add option to show waveplots/spectrograms
+# Add option to save/load trained model
+# Add button to save new default parameters
+# Add button to show/hide model parameter options
 
 from constants import *
 from classifier import Classifier
@@ -457,11 +460,18 @@ def startExtraction():
 #MARK: Train Model
 def trainModelHelper(result_list):
     #Update the parameters with the respective entry values
-    c.learning_rate = learning_rate.get()
-    c.epochs = epochs.get()
-    c.batch_size = batch_size.get()
-    c.test_size = test_size.get()
-    c.random_state = random_state.get()
+    try:
+        c.learning_rate = learning_rate.get()
+        c.epochs = epochs.get()
+        c.batch_size = batch_size.get()
+        c.test_size = test_size.get()
+        c.random_state = random_state.get()
+    except:
+        print(INVALID_INPUT_MSG)
+        #Show a warning box if an input field contains invalid input
+        mb.showerror(title="Invalid input", message=INVALID_INPUT_MSG)
+        #Abort the function call
+        return
     #Prep the data
     c.prepareData(result_list)
     #Build the model
@@ -482,9 +492,9 @@ thread1.start()
 root = Tk()
 root.title('Music Genre Classifier')
 root.minsize(width=428, height=220)
-root.geometry("428x300")
+root.geometry("428x270")
 
-c = Classifier(epochs=100, learning_rate=0.0001, test_size=0.1)
+c = Classifier()
 file_path = StringVar()
 paths = []
 result_list = []
@@ -499,7 +509,7 @@ total_progress = 0
 #already done flags to ask if they should happen again
 already_extracted = False
 already_saved = False
-#Model variables
+#Model parameter variables
 learning_rate = DoubleVar(value=c.learning_rate)
 epochs = IntVar(value=c.epochs)
 test_size = DoubleVar(value=c.test_size)

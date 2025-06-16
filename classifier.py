@@ -42,14 +42,15 @@ class Classifier:
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=self.test_size, random_state=self.random_state)
         #TODO: What does this do?
         x_train.shape, x_test.shape, y_train.shape, y_test.shape
-        #TODO: Does this work?
+        #Assign the split data to the model variables
         self.x_train, self.x_test, self.y_train, self.y_test = x_train, x_test, y_train, y_test
         print("Prepared Data")
 
     def buildModel(self):
         model = Sequential()
-        #Input shape is 57, since the table has 60 columns and we dropped 3
+        #Input shape is 53, since the table has 60 columns and we dropped 7
         #TODO: Play around with layers
+        #TODO: When perceptr and harmony are being used, set input shape to (57,)
         model.add(Input((53,), batch_size=self.batch_size))
         # model.add(Input((57,), batch_size=self.batch_size))
         model.add(Flatten())
@@ -66,6 +67,8 @@ class Classifier:
         self.model = model
     
     def trainModel(self):
+        #Fit the model with the parameters set in the gui
+        #TODO: Show progress in the gui
         history = self.model.fit(
                     x=self.x_train,
                     y=self.y_train,
@@ -74,6 +77,26 @@ class Classifier:
                     validation_data=(self.x_test, self.y_test)
                 )
         print("Fitted model")
-        test_error, test_accuracy = self.model.evaluate(self.x_test, self.y_test, verbose=True)
+        #Run a test simulation to get an accuracy reading
+        test_error, test_accuracy = self.model.evaluate(self.x_test, self.y_test, verbose=1)
         print(f'Accuracy: {test_accuracy}')
         print(f'Error: {test_error}')
+
+    def predictGenre(self, data):
+        print("Predicting Genres")
+        stripped_data = []
+        #Drop the filename, length and label columns + harmony and perceptr features
+        try:
+            for i in data:
+                stripped_list = i[2:14] + i[18:-1]
+                stripped_data.append(stripped_list)
+            #TODO: This currently crashes
+            prediction = self.model.predict(x=stripped_data[0], batch_size=53)
+            print("Test")
+            print(f"Predicted Genre: {prediction}")
+            return prediction
+        except:
+            print("Prediction failed, likely due to a wrong format")
+    
+    def loadModel(self, file_path):
+        return saving.load_model(file_path)

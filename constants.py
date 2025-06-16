@@ -19,7 +19,11 @@ HINT_TEXT = {
     "epochs": "Input the epoch amount for the model as an Int",
     "batch_size": "Input the batch size for the model as an Int",
     "random_state": "Input the random state for the model as an Int",
-    "test_size": "Input the test size for the model as a float"
+    "test_size": "Input the test size for the model as a float",
+    "train_model_button": "Click to train the model with the loaded feature set using the parameters set above. This will also scale the parameters and split the feature set. This process will take a while.",
+    "predict_genre_button": "Click to predict the genre of the loaded feature set(s). Currently non-functional.",
+    "save_model_button": "Click to save the current model to a file",
+    "load_model_button": "Click to load a trained model from a .keras file"
 }
 
 HEADER = (
@@ -94,5 +98,7 @@ ALREADY_EXTRACTED_MSG = "The currently loaded audio files have already been extr
 ALREADY_SAVED_MSG = "The currently loaded features have already been saved. Would you like to save them again?"
 SEARCH_SUBFOLDERS_MSG = "The selected folder contains no files to load, but subfolders have been detected. Would you like to recursively search all subfolders for audio files?"
 INVALID_INPUT_MSG = "One or more input fields contain invalid inputs! Take a look at the hint regarding each input field to see what field accepts what input, and use a dot as a decimal separator for floating point numbers."
+MODEL_ALREADY_SAVED_MSG = "The loaded model has already been saved in it's current state. Would you like to save it again?"
+MODEL_LOADING_FAILED_MSG = "An error has occured when loading the model. Make sure you have selected the correct file."
 
 EXTRACTION_STEPS = 7

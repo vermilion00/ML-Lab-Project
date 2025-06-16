@@ -13,12 +13,13 @@
 # Play around with ttk styling
 # Glob files in single lookup instead of looping over each ending
 # Fix being able to scroll up past first path for some reason
-# Add recursive path finder mode (to train the model from gui)
 # Add option to append to data with new selection, instead of overwriting it
 # Add option to show waveplots/spectrograms
-# Add option to save/load trained model
 # Add button to save new default parameters
 # Add button to show/hide model parameter options
+# Add a message showing which files have been extracted
+# Add a message showing that the model is loaded or not
+# If a model exists in the home directory, load it on startup
 
 from constants import *
 from classifier import Classifier
@@ -32,8 +33,6 @@ from tkinter import messagebox as mb
 from tkscrolledframe import ScrolledFrame
 import threading
 import csv
-# from sklearn import preprocessing
-# from sklearn.model_selection import train_test_split
 import librosa
 from librosa import feature
 from glob import glob
@@ -66,6 +65,9 @@ extract_flag = threading.Event()
 load_file_flag = threading.Event()
 save_file_flag = threading.Event()
 train_model_flag = threading.Event()
+predict_genre_flag = threading.Event()
+save_model_flag = threading.Event()
+load_model_flag = threading.Event()
 
 #MARK: Progress func
 #Handles showing and hiding the progress bar and updating it
@@ -73,6 +75,7 @@ def updateProgress(process):
     global progress
     global total_progress
     global paths
+    global model_available
     #Process name and 0% is set in function directly
     progress += 1
     #Check if this is the first call for this progress
@@ -84,6 +87,9 @@ def updateProgress(process):
                 progress_text.set("Running extraction: ")
                 #Lock the extraction button for the duration of the process
                 extract_button.config(state=DISABLED)
+                #Lock the model buttons for the duration of the process
+                train_model_button.config(state=DISABLED)
+                predict_genre_button.config(state=DISABLED)
         #Replace the hint label with the progress label and bar
         hint_label.pack_forget()
         progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2), fill=X)
@@ -116,6 +122,11 @@ def updateProgress(process):
                 save_button.config(state=NORMAL)
                 #Unlock extract button again
                 extract_button.config(state=NORMAL)
+                #Unlock the model buttons for the duration of the process
+                train_model_button.config(state=NORMAL)
+                #Only unlock the prediction button if a model is loaded
+                if model_available:
+                    predict_genre_button.config(state=NORMAL)
 
 #MARK: Thread 1 handler
 #Handles several functions running on one thread
@@ -142,6 +153,15 @@ def thread1_handler():
         elif train_model_flag.is_set():
             train_model_flag.clear()
             trainModelHelper(result_list)
+        elif predict_genre_flag.is_set():
+            predict_genre_flag.clear()
+            hint_text.set(c.predictGenre(result_list))
+        elif save_model_flag.is_set():
+            save_model_flag.clear()
+            saveModel(c.model)
+        elif load_model_flag.is_set():
+            load_model_flag.clear()
+            loadModelHelper()
         #Add other functions that run on the same thread as elif
         else:
             #If thread is not needed, sleep for 100ms before polling again
@@ -188,6 +208,9 @@ def loadAudio():
         extract_button.config(state=NORMAL)
         #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
         save_button.config(state=DISABLED)
+        #Lock the model buttons, to avoid confusion, since the new audio files haven't been extracted
+        train_model_button.config(state=DISABLED)
+        predict_genre_button.config(state=DISABLED)
 
 #MARK: Load CSV
 def loadCSV():
@@ -240,6 +263,10 @@ def loadFolder():
             extract_button.config(state=NORMAL)
             #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
             save_button.config(state=DISABLED)
+            #Lock the model buttons, to avoid confusion, since the new audio files haven't been extracted
+            train_model_button.config(state=DISABLED)
+            predict_genre_button.config(state=DISABLED)
+
             file_path_str = ""
             #Add newlines add the end of each path for the gui display
             for i in file_paths:
@@ -291,6 +318,10 @@ def loadFolder():
                             extract_button.config(state=NORMAL)
                             #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
                             save_button.config(state=DISABLED)
+                            #Lock the model buttons, to avoid confusion, since the new audio files haven't been extracted
+                            train_model_button.config(state=DISABLED)
+                            predict_genre_button.config(state=DISABLED)
+                            
                             file_path_str = ""
                             #Add newlines add the end of each path for the gui display
                             for i in file_paths:
@@ -344,6 +375,9 @@ def readCSV(csv_path):
             save_button.config(state=NORMAL)
             #Disable the extract button, since old audio files have now been unloaded
             extract_button.config(state=DISABLED)
+            #Unlock the model buttons, since data is now available
+            train_model_button.config(state=NORMAL)
+            predict_genre_button.config(state=NORMAL)
     except:
         #Error when opening the csv file
         print(READ_CSV_FAILED_MSG)
@@ -388,7 +422,62 @@ def saveCSV():
     else:   #If no data is available to save
         print(NO_DATA_MSG)
         mb.showerror(title="No data available", message=NO_DATA_MSG)
-        
+
+#MARK: Save Model
+def saveModel(model):
+    global model_already_saved
+    #If the model has already been saved, ask if it should be saved again
+    if model_already_saved and not mb.askyesno(title="Save again?", message=MODEL_ALREADY_SAVED_MSG):
+        #If the answer is No, abort the function call
+        return
+    filetype = [('Keras model file', '*.keras'),
+                ('All files', '*.*')]
+    #Set the title of the folder window
+    title = "Choose a directory and file name to save the model to"
+    #Set the default name of the saved file
+    default_name = "model.keras"
+    filename = fd.asksaveasfilename(filetypes=filetype, defaultextension=filetype, title=title, initialfile=default_name)
+    #If filename is empty, the save prompt has been canceled
+    if filename != "":
+        #Catch errors when writing to file
+        try:
+            #Save the model to the selected file path
+            model.save(filename)
+            #Set the saved flag
+            model_already_saved = True
+            hint_text.set("Saved model")
+        except:
+            #TODO: Adjust this message
+            print(OVERWRITE_FAILED_MSG)
+            mb.showerror(title="Failed to save file", message=OVERWRITE_FAILED_MSG)
+
+#MARK: Load Model
+def loadModelHelper():
+    global model_already_saved
+    global model_available
+    filetypes = (
+        ('Keras model file', '*.keras'),
+        ('All files', '*.*')
+    )
+    #Only allow selecting one file here
+    file_path_str = fd.askopenfilename(
+        title = 'Select the keras model file you wish to load',
+        filetypes = filetypes
+    )
+    #Check if a file has been selected
+    if file_path_str != "":
+        try:
+            #Load the selected model
+            c.model = c.loadModel(file_path_str)
+            #Reset the Model Saved flag
+            model_already_saved = False
+            #Set the model_available flag
+            model_available = True
+            hint_text.set("Loaded model")
+        except:
+            print("Failed to load file")
+            mb.showerror(title="Failed to load model", message=MODEL_LOADING_FAILED_MSG)
+
 #MARK: Extract
 #Extracts the features from the loaded audio files
 def startExtraction():
@@ -459,6 +548,8 @@ def startExtraction():
 
 #MARK: Train Model
 def trainModelHelper(result_list):
+    global model_already_saved
+    global model_available
     #Update the parameters with the respective entry values
     try:
         c.learning_rate = learning_rate.get()
@@ -481,6 +572,13 @@ def trainModelHelper(result_list):
     #Update wrap length of path screen according to dimensions
     #Train the model
     c.trainModel()
+    #Enable the Save Model button
+    save_model_button.config(state=NORMAL)
+    hint_text.set("Model training complete")
+    #Reset the saved model flag, since it's been trained again
+    model_already_saved = False
+    #Set the model available flag
+    model_available = True
 
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still
@@ -491,7 +589,7 @@ thread1.start()
 #The base state of every gui element is configured here
 root = Tk()
 root.title('Music Genre Classifier')
-root.minsize(width=428, height=220)
+root.minsize(width=428, height=221)
 root.geometry("428x270")
 
 c = Classifier()
@@ -509,12 +607,26 @@ total_progress = 0
 #already done flags to ask if they should happen again
 already_extracted = False
 already_saved = False
+model_already_saved = False
+model_available = False
 #Model parameter variables
 learning_rate = DoubleVar(value=c.learning_rate)
 epochs = IntVar(value=c.epochs)
 test_size = DoubleVar(value=c.test_size)
 batch_size = IntVar(value=c.batch_size)
 random_state = IntVar(value=c.random_state)
+
+#Load a model if it is saved in the starting directory
+try:
+    #If multiple models are in the starting directory, load the first one found
+    c.model = c.loadModel(glob("*.keras")[0])
+    hint_text.set("Loaded model from default directory")
+    print("Loaded model from starting directory")
+    #Set the model available flag
+    model_available = True
+#No model found/malformed file
+except:
+    print("No model found in starting directory")
 
 #MARK: Buttons
 #Make a new frame to group the related buttons together
@@ -579,15 +691,18 @@ random_state_entry = ttk.Entry(random_state_frame, textvariable=random_state, wi
 #MARK: Model buttons
 model_button_frame = ttk.Frame(model_frame, padding="2 2 2 2")
 model_button_frame.pack(anchor=N)
-prepare_data_button = ttk.Button(model_button_frame, text="Prep Data", command=train_model_flag.set)
-# prepare_data_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["prepare_data_button"]))
-prepare_data_button.pack(side=LEFT)
-build_model_button = ttk.Button(model_button_frame, text="Build Model", command=train_model_flag.set)
-# build_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["build_model_button"]))
-build_model_button.pack(side=LEFT)
-train_model_button = ttk.Button(model_button_frame, text="Train Model", command=train_model_flag.set)
-# train_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["train_model_button"]))
+load_model_button = ttk.Button(model_button_frame, text="Load Model", command=load_model_flag.set)
+load_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_model_button"]))
+load_model_button.pack(side=LEFT)
+train_model_button = ttk.Button(model_button_frame, text="Train Model", command=train_model_flag.set, state=DISABLED)
+train_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["train_model_button"]))
 train_model_button.pack(side=LEFT)
+predict_genre_button = ttk.Button(model_button_frame, text="Predict Genre", command=predict_genre_flag.set, state=DISABLED)
+predict_genre_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["predict_genre_button"]))
+predict_genre_button.pack(side=LEFT)
+save_model_button = ttk.Button(model_button_frame, text="Save Model", command=save_model_flag.set, state=DISABLED)
+save_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["save_model_button"]))
+save_model_button.pack(side=LEFT)
 
 #MARK: Paths
 #Scrolling path frame

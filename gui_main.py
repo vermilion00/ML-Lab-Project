@@ -19,7 +19,6 @@
 # Add button to show/hide model parameter options
 # Add a message showing which files have been extracted
 # Add a message showing that the model is loaded or not
-# If a model exists in the home directory, load it on startup
 
 from constants import *
 from classifier import Classifier
@@ -70,7 +69,7 @@ save_model_flag = threading.Event()
 load_model_flag = threading.Event()
 
 #MARK: Progress func
-#Handles showing and hiding the progress bar and updating it
+#Handles showing and hiding the progress bar as well as updating it
 def updateProgress(process):
     global progress
     global total_progress
@@ -87,6 +86,13 @@ def updateProgress(process):
                 progress_text.set("Running extraction: ")
                 #Lock the extraction button for the duration of the process
                 extract_button.config(state=DISABLED)
+                #Lock the model buttons for the duration of the process
+                train_model_button.config(state=DISABLED)
+                predict_genre_button.config(state=DISABLED)
+            case "training":
+                #Set total progress to the amount of steps per path * amount of paths
+                total_progress = epochs.get()
+                progress_text.set("Training model: ")
                 #Lock the model buttons for the duration of the process
                 train_model_button.config(state=DISABLED)
                 predict_genre_button.config(state=DISABLED)
@@ -112,7 +118,7 @@ def updateProgress(process):
         #Set the hint label to say that the process is done
         hint_text.set(HINT_TEXT[process])
         #Show the hint label again
-        hint_label.pack(side=BOTTOM, padx=2, pady=(0,2))
+        hint_label.pack(padx=2, pady=(0,2), fill=X)
         #Reset the progress
         progress = 0
         #Do something when process is finished
@@ -127,6 +133,11 @@ def updateProgress(process):
                 #Only unlock the prediction button if a model is loaded
                 if model_available:
                     predict_genre_button.config(state=NORMAL)
+            case "training":
+                #Unlock the model buttons for the duration of the process
+                train_model_button.config(state=NORMAL)
+                predict_genre_button.config(state=NORMAL)
+
 
 #MARK: Thread 1 handler
 #Handles several functions running on one thread
@@ -473,9 +484,9 @@ def loadModelHelper():
             model_already_saved = False
             #Set the model_available flag
             model_available = True
-            hint_text.set("Loaded model")
+            hint_text.set(f"Loaded model \"{file_path_str}\"")
         except:
-            print("Failed to load file")
+            print("Failed to load model")
             mb.showerror(title="Failed to load model", message=MODEL_LOADING_FAILED_MSG)
 
 #MARK: Extract
@@ -523,6 +534,7 @@ def startExtraction():
                 updateProgress("extraction")
                 #Use index 0 since function gives back a list with one element
                 feature_list.insert(14, feature.tempo(y=y, sr=sr)[0])
+                #TODO: Remove this
                 #Since harmony and perceptr can't currently be extracted, set them to 0 to match dataset length
                 for i in range(4): feature_list.insert(14, 0.0)
                 updateProgress("extraction")
@@ -539,8 +551,6 @@ def startExtraction():
                 progress += EXTRACTION_STEPS
                 print(f"A file at {i} could not be opened.")
                 mb.showerror(title="Invalid file", message=f"The file \"{i[i.rindex('/')+1:]}\" at path \"{i[:i.rindex('/')+1]}\" could not be opened. The extraction will continue without it.")
-        # #TODO: Remove this
-        # print(pd.DataFrame(result_list))
     #No files are selected
     else:
         mb.showerror(title="No files selected", message=NO_FILES_MSG)
@@ -580,6 +590,12 @@ def trainModelHelper(result_list):
     #Set the model available flag
     model_available = True
 
+#MARK: Wraplength
+#Set the wraplength of the label based on the window size
+def setWraplength(event):
+    #Subtract 6 from the width for padding
+    event.widget.configure(wraplength=event.width-6)
+
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still
 thread1 = threading.Thread(target=thread1_handler, daemon=True)
@@ -589,8 +605,9 @@ thread1.start()
 #The base state of every gui element is configured here
 root = Tk()
 root.title('Music Genre Classifier')
+#Set the minimum size so that all vital elements are still visible
 root.minsize(width=428, height=221)
-root.geometry("428x270")
+root.geometry("428x290")
 
 c = Classifier()
 file_path = StringVar()
@@ -616,17 +633,18 @@ test_size = DoubleVar(value=c.test_size)
 batch_size = IntVar(value=c.batch_size)
 random_state = IntVar(value=c.random_state)
 
-#Load a model if it is saved in the starting directory
+#Load a model at startup if it is saved in the starting directory
 try:
     #If multiple models are in the starting directory, load the first one found
-    c.model = c.loadModel(glob("*.keras")[0])
-    hint_text.set("Loaded model from default directory")
-    print("Loaded model from starting directory")
+    model_path = glob("*.keras")[0]
+    c.model = c.loadModel(model_path)
+    hint_text.set(f"Loaded model \"{model_path}\" from the default directory.")
+    print(f"Loaded model \"{model_path}\" from the default directory.")
     #Set the model available flag
     model_available = True
 #No model found/malformed file
 except:
-    print("No model found in starting directory")
+    pass
 
 #MARK: Buttons
 #Make a new frame to group the related buttons together
@@ -727,9 +745,11 @@ file_path_frame.bind_arrow_keys(root)
 file_path_label.pack(padx=5, pady=2, expand=True)
 
 #MARK: Hint label
-hint_label = ttk.Label(root, textvariable=hint_text)
+#For labels with dynamic wrap length, justify=CENTER, anchor=N and fill=X needs to be set for it to be centered
+hint_label = ttk.Label(root, textvariable=hint_text, justify=CENTER, anchor=N)
 hint_label.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["hint_label"]))
-hint_label.pack(padx=2, pady=(0,2))
+hint_label.bind('<Configure>', setWraplength)
+hint_label.pack(padx=2, pady=(0,2), fill=X)
 
 #MARK: Progress
 #Extra frame for the progress text, hidden as long as no process is running

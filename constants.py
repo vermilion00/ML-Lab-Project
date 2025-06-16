@@ -3,27 +3,28 @@ SAVE_FILE = SAVE_DIR + "/" + "features.csv"
 FORBIDDEN_CHARS = r'[\\/:*?"<>|]' #Not allowed in windows file names
 
 HINT_TEXT = {
-    "program_start": "Hover over an element to get an explanation",
-    "load_file_button": "Click to select the audio file(s) you wish to classify",
-    "load_csv_file_button": "Click to select a pre-extracted feature list",
-    "load_folder_button": "Click to select a folder containing the audio files you wish to classify",
-    "extract_button": "Click to begin extracting features from the selected files",
-    "save_button": "Click to save the extracted features to a specified location",
-    "file_path_label": "Shows the selected file path",
-    "progress_label": "Shows the progress on the currently running process",
-    "hint_label": "Shows helpful hints",
-    "read_csv": "Loaded features from CSV file",
-    "no_files_found": "No audio or csv files found in directory",
-    "extraction": "Extraction Done",
-    "learning_rate": "Input the learning rate for the model as a float",
-    "epochs": "Input the epoch amount for the model as an Int",
-    "batch_size": "Input the batch size for the model as an Int",
-    "random_state": "Input the random state for the model as an Int",
-    "test_size": "Input the test size for the model as a float",
-    "train_model_button": "Click to train the model with the loaded feature set using the parameters set above. This will also scale the parameters and split the feature set. This process will take a while.",
+    "program_start": "If you have a model file placed in the default directory, it will be loaded at program start. To train a model, either load and extract features from audio files or select a pre-extracted feature file, then click \"Train model\". To classify audio, you need to have a model loaded. Select the audio files and extract their features before predicting their genre.",
+    "load_file_button": "Click to select the audio file(s) you wish to import.",
+    "load_csv_file_button": "Click to select a pre-extracted feature list.",
+    "load_folder_button": "Click to select a folder containing the audio files you wish to import.",
+    "extract_button": "Click to begin extracting features from the selected files. Only available when audio files are selected.",
+    "save_button": "Click to save the extracted features to a specified location.",
+    "file_path_label": "Shows the selected file path.",
+    "progress_label": "Shows the progress on the currently running process.",
+    "hint_label": "Shows helpful hints as well as process progress.",
+    "read_csv": "Loaded features from CSV file.",
+    "no_files_found": "No audio or csv files found in directory.",
+    "extraction": "Extraction completed.",
+    "training": "Training completed",
+    "learning_rate": "Input the learning rate for the model as a float.",
+    "epochs": "Input the epoch amount for the model as an Int.",
+    "batch_size": "Input the batch size for the model as an Int.",
+    "random_state": "Input the random state for the model as an Int.",
+    "test_size": "Input the test size for the model as a float.",
+    "train_model_button": "Click to train the model with the loaded feature set using the parameters set above. This also scales the features and splits the feature set. The process will take a while.",
     "predict_genre_button": "Click to predict the genre of the loaded feature set(s). Currently non-functional.",
-    "save_model_button": "Click to save the current model to a file",
-    "load_model_button": "Click to load a trained model from a .keras file"
+    "save_model_button": "Click to save the current model to a file. Only available when a model is loaded.",
+    "load_model_button": "Click to load a trained model from a .keras file."
 }
 
 HEADER = (

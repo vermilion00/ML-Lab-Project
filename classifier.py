@@ -74,7 +74,8 @@ class Classifier:
                     y=self.y_train,
                     epochs=self.epochs,
                     batch_size=self.batch_size,
-                    validation_data=(self.x_test, self.y_test)
+                    validation_data=(self.x_test, self.y_test),
+                    # callbacks=[Callback()]
                 )
         print("Fitted model")
         #Run a test simulation to get an accuracy reading
@@ -100,3 +101,9 @@ class Classifier:
     
     def loadModel(self, file_path):
         return saving.load_model(file_path)
+    
+class Callback(callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        pass
+        # updateProgress("training")
+        # return super().on_epoch_end(epoch, logs)

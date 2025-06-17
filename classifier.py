@@ -108,8 +108,15 @@ class Callback(callbacks.Callback):
     def __init__(self):
         self.progress = 0
 
+    #Increment the progress counter after each epoch
     def on_epoch_end(self, epoch, logs=None):
         # self.progress += 1
         global progress
         progress += 1
         # return super().on_epoch_end(epoch, logs)
+
+    #Reset the progress counter when the training is finished
+    # def on_train_end(self, logs=None):
+    #     global progress
+    #     progress = 0
+    #     # return super().on_train_end(logs)

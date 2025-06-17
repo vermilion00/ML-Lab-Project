@@ -19,6 +19,7 @@
 # Add button to show/hide model parameter options
 # Add a message showing which files have been extracted
 # Add a message showing that the model is loaded or not
+# Progress bar doesn't reset properly, doesn't show up a second time
 
 from constants import *
 import classifier
@@ -74,6 +75,7 @@ def updateProgress(process, progress):
     global total_progress
     global paths
     global model_available
+    global extraction_progress
     #Check if this is the first call for this progress
     if progress == 1:
         match process:
@@ -116,8 +118,6 @@ def updateProgress(process, progress):
         hint_text.set(HINT_TEXT[process])
         #Show the hint label again
         hint_label.pack(padx=2, pady=(0,2), fill=X)
-        #Reset the progress
-        # progress = 0
         #Do something when process is finished
         match process:
             case "extraction":
@@ -127,6 +127,8 @@ def updateProgress(process, progress):
                 extract_button.config(state=NORMAL)
                 #Unlock the model buttons for the duration of the process
                 train_model_button.config(state=NORMAL)
+                #Reset the extraction progress counter
+                extraction_progress = 0
                 #Only unlock the prediction button if a model is loaded
                 if model_available:
                     predict_genre_button.config(state=NORMAL)
@@ -134,6 +136,8 @@ def updateProgress(process, progress):
                 #Unlock the model buttons after the process
                 train_model_button.config(state=NORMAL)
                 predict_genre_button.config(state=NORMAL)
+                #Reset the classifier progress
+                classifier.progress = 0
 
 #MARK: Thread 1 handler
 #Handles several functions running on one thread
@@ -176,14 +180,14 @@ def thread1_handler():
 
 #MARK: Thread 2 Handler
 def thread2_handler():
-    global progress
+    global extraction_progress
     local_extraction_progress = 0
     local_training_progress = 0
-    progress = 0
+    extraction_progress = 0
     while True:
-        if progress != local_extraction_progress:
-            local_extraction_progress = progress
-            updateProgress("extraction", progress)
+        if extraction_progress != local_extraction_progress:
+            local_extraction_progress = extraction_progress
+            updateProgress("extraction", extraction_progress)
         elif classifier.progress != local_training_progress:
             local_training_progress = classifier.progress
             updateProgress("training", classifier.progress)
@@ -510,7 +514,7 @@ def startExtraction():
     global result_list
     global already_extracted
     global model_already_trained
-    global progress
+    global extraction_progress
     #If the files have already been extracted, ask if they should be extracted again
     if already_extracted and not mb.askyesno(title="Extract again?", message=ALREADY_EXTRACTED_MSG):
         #If the answer is no, abort the function call
@@ -526,45 +530,38 @@ def startExtraction():
             try:
                 y, sr = librosa.load(i, sr=None)
                 #Update the progress text and bar (needs to be called each progress step)
-                # updateProgress("extraction")
-                progress += 1
+                extraction_progress += 1
                 #Loop through list of functions and add result to list
                 feature_list_mean = [mean(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
                 feature_list_var = [var(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
-                # updateProgress("extraction")
-                progress += 1
+                extraction_progress += 1
                 #Calculate the mfccs separately, as it returns a list of 20 results, 
                 #for which we need to calculate mean and var separately
                 feature_list_mean += [mean(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
                 feature_list_var += [var(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
-                # updateProgress("extraction")
-                progress +=1
+                extraction_progress +=1
                 #Make a feature list, extract the filename from the path, and get length
                 feature_list = [i[i.rindex('/')+1:], librosa.get_duration(y=y, sr=sr)]
                 #Combine the lists so that mean and var alternate
                 feature_list += [feat for pair in zip(feature_list_mean, feature_list_var) for feat in pair]
-                # updateProgress("extraction")
-                progress += 1
+                extraction_progress += 1
                 #Insert the rms, tempo and crossing rate values here, since they don't take the sr as a parameter
                 feature_list.insert(4, mean(feature.rms(y=y)))
                 feature_list.insert(5, var(feature.rms(y=y)))
                 feature_list.insert(12, mean(feature.zero_crossing_rate(y=y)))
                 feature_list.insert(13, var(feature.zero_crossing_rate(y=y)))
-                # updateProgress("extraction")
-                progress += 1
+                extraction_progress += 1
                 #Use index 0 since function gives back a list with one element
                 feature_list.insert(14, feature.tempo(y=y, sr=sr)[0])
                 #TODO: Remove this
                 #Since harmony and perceptr can't currently be extracted, set them to 0 to match dataset length
                 for i in range(4): feature_list.insert(14, 0.0)
-                # updateProgress("extraction")
-                progress += 1
+                extraction_progress += 1
                 #Get the label from the filename
                 feature_list.append(feature_list[0][:feature_list[0].index('.')])
                 #Append feature list of current track to complete result list, incase multiple tracks are selected
                 result_list.append(feature_list)
-                # updateProgress("extraction")
-                progress += 1
+                extraction_progress += 1
                 #Set the extracted flag
                 already_extracted = True
                 #Since new data is available that the model can be trained on, clear the flag
@@ -572,9 +569,12 @@ def startExtraction():
             #A file in the list could not be opened
             except:
                 #Add the progress, since the updateProgress function expects 7 more calls to happen
-                progress += EXTRACTION_STEPS
+                extraction_progress += EXTRACTION_STEPS
                 print(f"A file at {i} could not be opened.")
                 mb.showerror(title="Invalid file", message=f"The file \"{i[i.rindex('/')+1:]}\" at path \"{i[:i.rindex('/')+1]}\" could not be opened. The extraction will continue without it.")
+        
+        #Reset the progress counter after the entire process is done
+        progress = 0
     #No files are selected
     else:
         mb.showerror(title="No files selected", message=NO_FILES_MSG)
@@ -668,7 +668,7 @@ hint_text = StringVar(value=HINT_TEXT["program_start"])
 progress_text = StringVar()
 progress_number = StringVar()
 #Progress bar progress
-progress = 0
+extraction_progress = 0
 total_progress = 0
 #already done flags to ask if they should happen again
 already_extracted = False

@@ -21,7 +21,7 @@
 # Add a message showing that the model is loaded or not
 
 from constants import *
-from classifier import Classifier
+import classifier
 from numpy import mean, var
 import pandas as pd
 import time
@@ -70,13 +70,10 @@ load_model_flag = threading.Event()
 
 #MARK: Progress func
 #Handles showing and hiding the progress bar as well as updating it
-def updateProgress(process):
-    global progress
+def updateProgress(process, progress):
     global total_progress
     global paths
     global model_available
-    #Process name and 0% is set in function directly
-    progress += 1
     #Check if this is the first call for this progress
     if progress == 1:
         match process:
@@ -120,7 +117,7 @@ def updateProgress(process):
         #Show the hint label again
         hint_label.pack(padx=2, pady=(0,2), fill=X)
         #Reset the progress
-        progress = 0
+        # progress = 0
         #Do something when process is finished
         match process:
             case "extraction":
@@ -134,10 +131,9 @@ def updateProgress(process):
                 if model_available:
                     predict_genre_button.config(state=NORMAL)
             case "training":
-                #Unlock the model buttons for the duration of the process
+                #Unlock the model buttons after the process
                 train_model_button.config(state=NORMAL)
                 predict_genre_button.config(state=NORMAL)
-
 
 #MARK: Thread 1 handler
 #Handles several functions running on one thread
@@ -176,6 +172,22 @@ def thread1_handler():
         #Add other functions that run on the same thread as elif
         else:
             #If thread is not needed, sleep for 100ms before polling again
+            time.sleep(0.1)
+
+#MARK: Thread 2 Handler
+def thread2_handler():
+    global progress
+    local_extraction_progress = 0
+    local_training_progress = 0
+    progress = 0
+    while True:
+        if progress != local_extraction_progress:
+            local_extraction_progress = progress
+            updateProgress("extraction", progress)
+        elif classifier.progress != local_training_progress:
+            local_training_progress = classifier.progress
+            updateProgress("training", classifier.progress)
+        else:
             time.sleep(0.1)
 
 #MARK: Load helper
@@ -353,6 +365,7 @@ def loadFolder():
 def readCSV(csv_path):
     global result_list
     global already_saved
+    global model_already_trained
     #Reset the result list
     result_list = []
     #Catch possible error
@@ -380,8 +393,9 @@ def readCSV(csv_path):
                 line_count += 1
             #Show a message that the features have been loaded
             hint_text.set(HINT_TEXT["read_csv"])
-            #Since new features have been loaded, reset the saved flag
+            #Since new features have been loaded, reset the saved flag and trained flag
             already_saved = False
+            model_already_trained = False
             #Enable the save button, since features are now available to save
             save_button.config(state=NORMAL)
             #Disable the extract button, since old audio files have now been unloaded
@@ -495,6 +509,7 @@ def startExtraction():
     global paths
     global result_list
     global already_extracted
+    global model_already_trained
     global progress
     #If the files have already been extracted, ask if they should be extracted again
     if already_extracted and not mb.askyesno(title="Extract again?", message=ALREADY_EXTRACTED_MSG):
@@ -511,40 +526,49 @@ def startExtraction():
             try:
                 y, sr = librosa.load(i, sr=None)
                 #Update the progress text and bar (needs to be called each progress step)
-                updateProgress("extraction")
+                # updateProgress("extraction")
+                progress += 1
                 #Loop through list of functions and add result to list
                 feature_list_mean = [mean(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
                 feature_list_var = [var(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
-                updateProgress("extraction")
+                # updateProgress("extraction")
+                progress += 1
                 #Calculate the mfccs separately, as it returns a list of 20 results, 
                 #for which we need to calculate mean and var separately
                 feature_list_mean += [mean(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
                 feature_list_var += [var(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
-                updateProgress("extraction")
+                # updateProgress("extraction")
+                progress +=1
                 #Make a feature list, extract the filename from the path, and get length
                 feature_list = [i[i.rindex('/')+1:], librosa.get_duration(y=y, sr=sr)]
                 #Combine the lists so that mean and var alternate
                 feature_list += [feat for pair in zip(feature_list_mean, feature_list_var) for feat in pair]
-                updateProgress("extraction")
+                # updateProgress("extraction")
+                progress += 1
                 #Insert the rms, tempo and crossing rate values here, since they don't take the sr as a parameter
                 feature_list.insert(4, mean(feature.rms(y=y)))
                 feature_list.insert(5, var(feature.rms(y=y)))
                 feature_list.insert(12, mean(feature.zero_crossing_rate(y=y)))
                 feature_list.insert(13, var(feature.zero_crossing_rate(y=y)))
-                updateProgress("extraction")
+                # updateProgress("extraction")
+                progress += 1
                 #Use index 0 since function gives back a list with one element
                 feature_list.insert(14, feature.tempo(y=y, sr=sr)[0])
                 #TODO: Remove this
                 #Since harmony and perceptr can't currently be extracted, set them to 0 to match dataset length
                 for i in range(4): feature_list.insert(14, 0.0)
-                updateProgress("extraction")
+                # updateProgress("extraction")
+                progress += 1
                 #Get the label from the filename
                 feature_list.append(feature_list[0][:feature_list[0].index('.')])
                 #Append feature list of current track to complete result list, incase multiple tracks are selected
                 result_list.append(feature_list)
-                updateProgress("extraction")
+                # updateProgress("extraction")
+                progress += 1
                 #Set the extracted flag
                 already_extracted = True
+                #Since new data is available that the model can be trained on, clear the flag
+                model_already_trained = False
             #A file in the list could not be opened
             except:
                 #Add the progress, since the updateProgress function expects 7 more calls to happen
@@ -559,14 +583,33 @@ def startExtraction():
 #MARK: Train Model
 def trainModelHelper(result_list):
     global model_already_saved
+    global model_already_trained
     global model_available
-    #Update the parameters with the respective entry values
+    params_changed = False
     try:
-        c.learning_rate = learning_rate.get()
-        c.epochs = epochs.get()
-        c.batch_size = batch_size.get()
-        c.test_size = test_size.get()
-        c.random_state = random_state.get()
+        #Check if the parameters have been changed
+        # if learning_rate.get() != c.learning_rate or c.epochs != epochs.get() or c.batch_size != batch_size.get() or c.test_size != test_size.get() or c.random_state != random_state.get():
+        #Update the parameters with the respective entry values
+        if learning_rate.get() != c.learning_rate:
+            c.learning_rate = learning_rate.get()
+            params_changed = True
+        if epochs.get() != c.epochs:
+            c.epochs = epochs.get()
+            params_changed = True
+        if batch_size.get() != c.batch_size:
+            c.batch_size = batch_size.get()
+            params_changed = True
+        if test_size.get() != c.test_size:
+            c.test_size = test_size.get()
+            params_changed = True
+        if random_state.get() != c.random_state:
+            c.random_state = random_state.get()
+            params_changed = True
+        #If the parameters haven't been changed and the model is still loaded, ask if it should be retrained
+        if model_already_trained and not params_changed and not mb.askyesno(title="Train model again?", message=MODEL_ALREADY_TRAINED_MSG):
+            #Abort the function call if the model has been trained and the answer is no
+            return
+
     except:
         print(INVALID_INPUT_MSG)
         #Show a warning box if an input field contains invalid input
@@ -589,6 +632,10 @@ def trainModelHelper(result_list):
     model_already_saved = False
     #Set the model available flag
     model_available = True
+    #Set the model already trained flag
+    model_already_trained = True
+    #Reset the training progress counter
+    classifier.progress = 0
 
 #MARK: Wraplength
 #Set the wraplength of the label based on the window size
@@ -600,6 +647,8 @@ def setWraplength(event):
 #Put long functions on a different thread so the GUI can update still
 thread1 = threading.Thread(target=thread1_handler, daemon=True)
 thread1.start()
+thread2 = threading.Thread(target=thread2_handler, daemon=True)
+thread2.start()
 
 #MARK: Tk config
 #The base state of every gui element is configured here
@@ -609,7 +658,7 @@ root.title('Music Genre Classifier')
 root.minsize(width=428, height=221)
 root.geometry("428x290")
 
-c = Classifier()
+c = classifier.Classifier()
 file_path = StringVar()
 paths = []
 result_list = []
@@ -625,6 +674,7 @@ total_progress = 0
 already_extracted = False
 already_saved = False
 model_already_saved = False
+model_already_trained = False
 model_available = False
 #Model parameter variables
 learning_rate = DoubleVar(value=c.learning_rate)

@@ -101,5 +101,6 @@ SEARCH_SUBFOLDERS_MSG = "The selected folder contains no files to load, but subf
 INVALID_INPUT_MSG = "One or more input fields contain invalid inputs! Take a look at the hint regarding each input field to see what field accepts what input, and use a dot as a decimal separator for floating point numbers."
 MODEL_ALREADY_SAVED_MSG = "The loaded model has already been saved in it's current state. Would you like to save it again?"
 MODEL_LOADING_FAILED_MSG = "An error has occured when loading the model. Make sure you have selected the correct file."
+MODEL_ALREADY_TRAINED_MSG = "The current model has already been trained with these parameters and features. Would you like to train it again? You can change the parameters using the input fields above."
 
 EXTRACTION_STEPS = 7

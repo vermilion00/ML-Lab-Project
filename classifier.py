@@ -9,6 +9,8 @@ from keras.api.layers import *
 FILENAME_INDEX = 0
 LENGTH_INDEX = 1
 LABEL_INDEX = 59
+
+progress = 0
 class Classifier:
     def __init__(self, learning_rate=0.00011, epochs=120, test_size=0.1, random_state=111, batch_size=20):
         self.learning_rate = learning_rate
@@ -75,7 +77,7 @@ class Classifier:
                     epochs=self.epochs,
                     batch_size=self.batch_size,
                     validation_data=(self.x_test, self.y_test),
-                    # callbacks=[Callback()]
+                    callbacks=[Callback()]
                 )
         print("Fitted model")
         #Run a test simulation to get an accuracy reading
@@ -103,7 +105,11 @@ class Classifier:
         return saving.load_model(file_path)
     
 class Callback(callbacks.Callback):
+    def __init__(self):
+        self.progress = 0
+
     def on_epoch_end(self, epoch, logs=None):
-        pass
-        # updateProgress("training")
+        # self.progress += 1
+        global progress
+        progress += 1
         # return super().on_epoch_end(epoch, logs)

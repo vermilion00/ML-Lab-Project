@@ -25,6 +25,8 @@
 # Loading model works after training, so theres probably a flag not being set
 # Extract files automatically after loading instead of clicking extra button?
 # Tempo calculation is wrong every second audio clip in the list?
+# Fix progress bar progress being non-uniform
+# Program crashes if the first two progress += 1 calls happen too fast
 
 from constants import *
 import classifier
@@ -39,7 +41,7 @@ from tkscrolledframe import ScrolledFrame
 import threading
 import csv
 import librosa
-from librosa import feature, effects
+from librosa import feature, effects, beat
 from glob import glob
 
 #TODO: Remove this if not needed
@@ -82,7 +84,8 @@ def updateProgress(process, progress):
     global model_available
     global extraction_progress
     #Check if this is the first call for this progress
-    if progress == 1:
+    #Since thread 2 crashes if the first call to this function happens with progress > 1, also check for 2
+    if progress == 1 or progress == 2:
         match process:
             case "extraction":
                 #Set total progress to the amount of steps per path * amount of paths
@@ -199,7 +202,8 @@ def thread2_handler():
             local_training_progress = classifier.progress
             updateProgress("training", classifier.progress)
         else:
-            time.sleep(0.1)
+            #Since the thread crashes if the first progress incrementation isn't caught, use a shorter time here
+            time.sleep(0.05)
 
 #MARK: Load helper
 #A helper function, since I can't call a function and set the flag in a button action
@@ -514,6 +518,12 @@ def loadModelHelper():
             print("Failed to load model")
             mb.showerror(title="Failed to load model", message=MODEL_LOADING_FAILED_MSG)
 
+
+#A helper function to increment progress counter during list execution
+def incrementProgressHelper():
+    global extraction_progress
+    extraction_progress += 1
+
 #MARK: Extract
 #Extracts the features from the loaded audio files
 def startExtraction():
@@ -531,45 +541,45 @@ def startExtraction():
     #TODO: Check if paths can be a tuple here - prob not relevant since button is locked anyway
     if paths != []:
         result_list = []
+        #TODO: Remove this
+        # start = time.time()
         #Iterate over every selected path and extract the audio features
         for i in paths:
-            #Load the audio file using librosa
-            #y is a time-series-array, sr is the sample rate
             try:
+                #Load the audio file using librosa
+                #y is a time-series-array, sr is the sample rate
                 y, sr = librosa.load(i, sr=None)
-                #Update the progress text and bar (needs to be called each progress step)
                 extraction_progress += 1
-                #Loop through list of functions and add result to list
-                feature_list_mean = [mean(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
-                feature_list_var = [var(func(y=y, sr=sr)) for func in FEATURE_FUNCTION_LIST]
+                #Put all functions in an array for easy accessing
+                feature_function_list = [
+                    feature.chroma_stft(y=y, sr=sr),
+                    feature.rms(y=y),
+                    feature.spectral_centroid(y=y, sr=sr),
+                    feature.spectral_bandwidth(y=y, sr=sr),
+                    feature.spectral_rolloff(y=y, sr=sr),
+                    feature.zero_crossing_rate(y=y),
+                    #Add helper function to increment progress counter during list execution
+                    # incrementProgressHelper(),
+                    #Use an unpacking operator since this returns two values we need
+                    *effects.hpss(y=y),
+                    # incrementProgressHelper(),
+                    #Use an unpacking operator since this returns a list of lists
+                    *feature.mfcc(y=y, sr=sr)
+                ]
                 extraction_progress += 1
-                #Calculate the mfccs separately, as it returns a list of 20 results, 
-                #for which we need to calculate mean and var separately
-                feature_list_mean += [mean(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
-                feature_list_var += [var(mfcc) for mfcc in feature.mfcc(y=y, sr=sr)]
-                extraction_progress +=1
                 #Make a feature list, extract the filename from the path, and get length
                 feature_list = [i[i.rindex('/')+1:], librosa.get_duration(y=y, sr=sr)]
-                #Combine the lists so that mean and var alternate
-                feature_list += [feat for pair in zip(feature_list_mean, feature_list_var) for feat in pair]
+                #Delete the progress helper functions
+                # del feature_function_list[6]
+                # del feature_function_list[7]
+                #Iterate through all functions in the array and get the mean and var
+                for feat in feature_function_list:
+                    feature_list.append(mean(feat))
+                    feature_list.append(var(feat))
                 extraction_progress += 1
-                #Insert the rms, tempo and crossing rate values here, since they don't take the sr as a parameter
-                feature_list.insert(4, mean(feature.rms(y=y)))
-                feature_list.insert(5, var(feature.rms(y=y)))
-                feature_list.insert(12, mean(feature.zero_crossing_rate(y=y)))
-                feature_list.insert(13, var(feature.zero_crossing_rate(y=y)))
-                extraction_progress += 1
-                #Calculate and insert harmony and perceptr values
-                harmony, perceptr = effects.hpss(y=y)
-                feature_list.insert(14, mean(harmony))
-                feature_list.insert(15, var(harmony))
-                feature_list.insert(16, mean(perceptr))
-                feature_list.insert(17, var(perceptr))
-                #Use index 0 since function gives back a list with one element
-                feature_list.insert(18, feature.tempo(y=y, sr=sr)[0])
-                #TODO: Remove this
-                #Since harmony and perceptr can't currently be extracted, set them to 0 to match dataset length
-                # for i in range(4): feature_list.insert(14, 0.0)
+                #Insert the tempo, since the return format is different and no mean or var is needed
+                #Unpack and save the first value, since the rest is not needed
+                feature_list.insert(18, *beat.beat_track(y=y, sr=sr)[0])
                 extraction_progress += 1
                 #Get the label from the filename
                 feature_list.append(feature_list[0][:feature_list[0].index('.')])
@@ -582,6 +592,7 @@ def startExtraction():
                 already_saved = False
                 #Since new data is available that the model can be trained on, clear the flag
                 model_already_trained = False
+
             #A file in the list could not be opened
             except:
                 #Add the progress, since the updateProgress function expects 7 more calls to happen

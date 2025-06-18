@@ -103,4 +103,4 @@ MODEL_ALREADY_SAVED_MSG = "The loaded model has already been saved in it's curre
 MODEL_LOADING_FAILED_MSG = "An error has occured when loading the model. Make sure you have selected the correct file."
 MODEL_ALREADY_TRAINED_MSG = "The current model has already been trained with these parameters and features. Would you like to train it again? You can change the parameters using the input fields above."
 
-EXTRACTION_STEPS = 7
+EXTRACTION_STEPS = 5

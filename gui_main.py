@@ -327,7 +327,7 @@ def loadFolder():
                             file_path.set(file_path_str)
                         #No files found in subfolders
                         else:
-                            mb.showwarning(title="No files found", message="No files have been found in all subfolders.")
+                            mb.showinfo(title="No files found", message="No files have been found in all subfolders.")
 
                 hint_text.set(HINT_TEXT["no_files_found"])
 
@@ -369,10 +369,10 @@ def readCSV(csv_path):
             model_already_trained = False
             #Update the button state accordingly
             setButtonState("opened_csv")
-    except:
+    except Exception as e:
         #Error when opening the csv file
         print(READ_CSV_FAILED_MSG)
-        mb.showerror(title="Failed to read file", message=READ_CSV_FAILED_MSG)
+        mb.showerror(title="Failed to read file", message=READ_CSV_FAILED_MSG + f'\n{e}')
 
 #MARK: Save csv
 #Opens file dialog to choose the directory and name to save to
@@ -404,9 +404,9 @@ def saveCSV():
                     print("Done writing file")
                 #Set the saved flag
                 already_saved = True
-            except:
+            except Exception as e:
                 print(OVERWRITE_FAILED_MSG)
-                mb.showerror(title="Failed to save file", message=OVERWRITE_FAILED_MSG)
+                mb.showerror(title="Failed to save file", message=OVERWRITE_FAILED_MSG + f'\n{e}')
     else:   #If no data is available to save
         print(NO_DATA_MSG)
         mb.showerror(title="No data available", message=NO_DATA_MSG)
@@ -434,10 +434,10 @@ def saveModel(model):
             #Set the saved flag
             model_already_saved = True
             hint_text.set("Saved model")
-        except:
+        except Exception as e:
             #TODO: Adjust this message
             print(OVERWRITE_FAILED_MSG)
-            mb.showerror(title="Failed to save file", message=OVERWRITE_FAILED_MSG)
+            mb.showerror(title="Failed to save file", message=OVERWRITE_FAILED_MSG + f'\n{e}')
 
 #MARK: Load Model
 def loadModelHelper():
@@ -462,9 +462,9 @@ def loadModelHelper():
             #Set the model_available flag
             model_available = True
             hint_text.set(f"Loaded model \"{file_path_str}\"")
-        except:
+        except Exception as e:
             print("Failed to load model")
-            mb.showerror(title="Failed to load model", message=MODEL_LOADING_FAILED_MSG)
+            mb.showerror(title="Failed to load model", message=MODEL_LOADING_FAILED_MSG + f'\n{e}')
 
 
 #A helper function to increment progress counter during list execution
@@ -543,11 +543,11 @@ def startExtraction():
                 model_already_trained = False
 
             #A file in the list could not be opened
-            except:
+            except Exception as e:
                 #Add the progress, since the updateProgress function expects 7 more calls to happen
                 extraction_progress += EXTRACTION_STEPS
                 print(f"A file at {i} could not be opened.")
-                mb.showerror(title="Invalid file", message=f"The file \"{i[i.rindex('/')+1:]}\" at path \"{i[:i.rindex('/')+1]}\" could not be opened. The extraction will continue without it.")
+                mb.showerror(title="Invalid file", message=f"The file \"{i[i.rindex('/')+1:]}\" at path \"{i[:i.rindex('/')+1]}\" could not be opened. The extraction will continue without it.\n{e}")
     #No files are selected
     else:
         mb.showerror(title="No files selected", message=NO_FILES_MSG)
@@ -583,10 +583,10 @@ def trainModelHelper(result_list):
             #Abort the function call if the model has been trained and the answer is no
             return
 
-    except:
+    except Exception as e:
         print(INVALID_INPUT_MSG)
         #Show a warning box if an input field contains invalid input
-        mb.showerror(title="Invalid input", message=INVALID_INPUT_MSG)
+        mb.showerror(title="Invalid input", message=INVALID_INPUT_MSG + f'\n{e}')
         #Abort the function call
         return
     #Prep the data
@@ -837,7 +837,8 @@ try:
     # save_model_button.config(state=NORMAL)
 #No model found/malformed file
 except:
-    pass
+    mb.showinfo(title="No model loaded", message=NO_MODEL_MSG)
+    print("No model loaded")
 
 root.mainloop()
 

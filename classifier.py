@@ -13,6 +13,7 @@ LABEL_INDEX = 59
 
 progress = 0
 class Classifier:
+    #MARK: Init
     def __init__(self, learning_rate=0.00011, epochs=120, test_size=0.1, random_state=111, batch_size=20):
         self.learning_rate = learning_rate
         self.epochs = epochs
@@ -28,6 +29,7 @@ class Classifier:
         self.label_encoder = LabelEncoder()
         self.scaler = MinMaxScaler()
     
+    #MARK: Prepare Data
     def prepareData(self, data_list):
         #Encode the labels into integers
         df = pd.DataFrame(data_list)
@@ -35,9 +37,7 @@ class Classifier:
         df[LABEL_INDEX] = self.label_encoder.fit_transform(df[LABEL_INDEX])
         y = df[LABEL_INDEX]
         #Drop label, length and filename columns
-        #Also remove the harmony and perceptr columns while they can't be extracted
-        #TODO: Remove the last indexes when harmony and perceptr can be extracted
-        x = df.drop([FILENAME_INDEX, LENGTH_INDEX, LABEL_INDEX, 14, 15, 16, 17], axis=1)
+        x = df.drop([FILENAME_INDEX, LENGTH_INDEX, LABEL_INDEX], axis=1)
         #Scale the data
         columns = x.columns
         #The scaler is the MinMaxScaler
@@ -52,13 +52,12 @@ class Classifier:
         self.x_train, self.x_test, self.y_train, self.y_test = x_train, x_test, y_train, y_test
         print("Prepared Data")
 
+    #MARK: Build Model
     def buildModel(self):
         model = Sequential()
-        #Input shape is 53, since the table has 60 columns and we dropped 7
+        #Input shape is 57, since the table has 60 columns and we dropped 3
         #TODO: Play around with layers
-        #TODO: When perceptr and harmony are being used, set input shape to (57,)
-        model.add(Input(shape=(53,), batch_size=self.batch_size))
-        # model.add(Input((57,), batch_size=self.batch_size))
+        model.add(Input(shape=(57,), batch_size=self.batch_size))
         model.add(Flatten())
         model.add(Dense(units=256, activation='relu'))
         model.add(BatchNormalization())
@@ -76,6 +75,7 @@ class Classifier:
         print("Compiled Model")
         self.model = model
     
+    #MARK: Train Model
     def trainModel(self):
         #Fit the model with the parameters set in the gui
         history = self.model.fit(
@@ -92,6 +92,7 @@ class Classifier:
         print(f'Accuracy: {test_accuracy}')
         print(f'Error: {test_error}')
 
+    #MARK: Predict Genre
     def predictGenre(self, data):
         print("Predicting Genres")
         stripped_data = []
@@ -99,8 +100,8 @@ class Classifier:
         try:
             #Loop through all selected files
             for i in data:
-                #Remove the filename, length, harmony, perceptr and label values
-                stripped_list = i[2:14] + i[18:-1]
+                #Remove the filename, length and label values
+                stripped_list = i[2:-1]
                 #Shape the features to (-1, 1)
                 shaped_list = np_array(stripped_list).reshape(1, -1)
                 #Scale the features using the MinMaxScaler
@@ -112,8 +113,9 @@ class Classifier:
             result_list = []
             for song_data in stripped_data:
                 prediction = self.model.predict(x=song_data)[0]
-                prediction = [f"{item*100:.2f}%" for item in prediction]
+                #Format the prediction
                 #Multiply prediction by 100 to get the percentage
+                prediction = [f"{item*100:.2f}%" for item in prediction]
                 result = list(zip(self.label_encoder.classes_, prediction))
                 result.sort(key=lambda a: a[1], reverse=True)
                 print(f"Predicted Genres: {result}")
@@ -122,12 +124,14 @@ class Classifier:
                 result_list.append(result[0])
             #If only one result is available, return the result as a string
             if len(result_list) == 1:
-                return f"{result_list[0][0]} with a probability of {result_list[0][1]}"
+                #Double indexing because result_list is a tuple within a list
+                #Capitalize the genre because the labels are lower case
+                return f"{result_list[0][0].capitalize()} with a probability of {result_list[0][1]}"
             #If more, then loop through all of them and prepend their number
             else:
                 result_string = ""
                 for idx, genre in enumerate(result_list):
-                    result_string += f"{idx+1}: {genre[0]} with a probability of {genre[1]}\n"
+                    result_string += f"{idx+1}: {genre[0].capitalize()} with a probability of {genre[1]}\n"
                 #Cut off the last newline when returning
                 return result_string[:-1]
         except:
@@ -137,6 +141,7 @@ class Classifier:
         self.model = saving.load_model(file_path)
         # return saving.load_model(file_path)
     
+#MARK: Callback
 class Callback(callbacks.Callback):
     def __init__(self):
         self.progress = 0

@@ -24,6 +24,7 @@
 # Loading model from file doesn't seem to work, prediction fails
 # Loading model works after training, so theres probably a flag not being set
 # Extract files automatically after loading instead of clicking extra button?
+# Tempo calculation is wrong every second audio clip in the list?
 
 from constants import *
 import classifier
@@ -38,7 +39,7 @@ from tkscrolledframe import ScrolledFrame
 import threading
 import csv
 import librosa
-from librosa import feature
+from librosa import feature, effects
 from glob import glob
 
 #TODO: Remove this if not needed
@@ -519,6 +520,7 @@ def startExtraction():
     global paths
     global result_list
     global already_extracted
+    global already_saved
     global model_already_trained
     global extraction_progress
     #If the files have already been extracted, ask if they should be extracted again
@@ -557,11 +559,17 @@ def startExtraction():
                 feature_list.insert(12, mean(feature.zero_crossing_rate(y=y)))
                 feature_list.insert(13, var(feature.zero_crossing_rate(y=y)))
                 extraction_progress += 1
+                #Calculate and insert harmony and perceptr values
+                harmony, perceptr = effects.hpss(y=y)
+                feature_list.insert(14, mean(harmony))
+                feature_list.insert(15, var(harmony))
+                feature_list.insert(16, mean(perceptr))
+                feature_list.insert(17, var(perceptr))
                 #Use index 0 since function gives back a list with one element
-                feature_list.insert(14, feature.tempo(y=y, sr=sr)[0])
+                feature_list.insert(18, feature.tempo(y=y, sr=sr)[0])
                 #TODO: Remove this
                 #Since harmony and perceptr can't currently be extracted, set them to 0 to match dataset length
-                for i in range(4): feature_list.insert(14, 0.0)
+                # for i in range(4): feature_list.insert(14, 0.0)
                 extraction_progress += 1
                 #Get the label from the filename
                 feature_list.append(feature_list[0][:feature_list[0].index('.')])
@@ -570,6 +578,8 @@ def startExtraction():
                 extraction_progress += 1
                 #Set the extracted flag
                 already_extracted = True
+                #Reset the already saved flag
+                already_saved = False
                 #Since new data is available that the model can be trained on, clear the flag
                 model_already_trained = False
             #A file in the list could not be opened

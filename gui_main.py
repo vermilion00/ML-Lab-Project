@@ -5,7 +5,6 @@
 #Use askopenfilenames to allow selecting multiple files, then iterate through all of them
 
 # TODO:
-# What is harmony and perceptr?
 # How is the duration calculated in the dataset?
 # Is it important that the calculated values differ slightly from the dataset values?
 # Writing 100 rows of csv is instant, but maybe add progress bar to saveCSV function
@@ -19,19 +18,18 @@
 # Add button to show/hide model parameter options
 # Add a message showing which files have been extracted
 # Add a message showing that the model is loaded or not
-# Rework extract function list to include parameters?
 # Add button to compute and show confusion matrices
 # Loading model from file doesn't seem to work, prediction fails
 # Loading model works after training, so theres probably a flag not being set
 # Extract files automatically after loading instead of clicking extra button?
-# Tempo calculation is wrong every second audio clip in the list?
-# Fix progress bar progress being non-uniform
+# Make progress bar progress more uniform - get rid of perceptr and harmony, tempo?
+# - Calls to their functions take too long
 # Program crashes if the first two progress += 1 calls happen too fast
+# Speed up startup somehow
 
 from constants import *
 import classifier
 from numpy import mean, var
-import pandas as pd
 import time
 from tkinter import *
 from tkinter import ttk
@@ -55,17 +53,6 @@ from glob import glob
 #     from ctypes import windll
 #     #Set folder to be hidden
 #     ret = windll.kernel32.SetFileAttributesW(SAVE_DIR, 0x02)
-
-#Function list for use in startExtraction function
-FEATURE_FUNCTION_LIST = [
-    feature.chroma_stft,
-    feature.spectral_centroid,
-    feature.spectral_bandwidth,
-    feature.spectral_rolloff
-    #TODO:
-    #harmony is not a thing, librosa.effects.harmonic?
-    #What is perceptr?
-]
 
 #MARK: Threading events
 extract_flag = threading.Event()
@@ -91,18 +78,13 @@ def updateProgress(process, progress):
                 #Set total progress to the amount of steps per path * amount of paths
                 total_progress = EXTRACTION_STEPS * len(paths)
                 progress_text.set("Running extraction: ")
-                #Lock the extraction button for the duration of the process
-                extract_button.config(state=DISABLED)
-                #Lock the model buttons for the duration of the process
-                train_model_button.config(state=DISABLED)
-                predict_genre_button.config(state=DISABLED)
+                #Update button states
+                setButtonState("extraction_started")
             case "training":
                 #Set total progress to the amount of steps per path * amount of paths
                 total_progress = epochs.get()
                 progress_text.set("Training model: ")
-                #Lock the model buttons for the duration of the process
-                train_model_button.config(state=DISABLED)
-                predict_genre_button.config(state=DISABLED)
+                setButtonState("training_started")
         #Replace the hint label with the progress label and bar
         hint_label.pack_forget()
         progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2), fill=X)
@@ -115,6 +97,7 @@ def updateProgress(process, progress):
         progress_bar['value'] = num
     #Process is done
     else:
+        #TODO: Remove this if the progress bar should not stay up a bit after completion
         #Limit the max progress value to 100
         # progress_number.set("100%")
         # progress_bar["value"] = 100
@@ -129,22 +112,12 @@ def updateProgress(process, progress):
         #Do something when process is finished
         match process:
             case "extraction":
-                #Unlock save button only after extraction has finished
-                save_button.config(state=NORMAL)
-                #Unlock extract button again
-                extract_button.config(state=NORMAL)
-                #Unlock the model buttons for the duration of the process
-                train_model_button.config(state=NORMAL)
+                setButtonState("extraction_finished")
                 #Reset the extraction progress counter
                 extraction_progress = 0
-                #Only unlock the prediction button if a model is loaded
-                if model_available:
-                    predict_genre_button.config(state=NORMAL)
             case "training":
-                #Unlock the model buttons after the process
-                train_model_button.config(state=NORMAL)
-                predict_genre_button.config(state=NORMAL)
-                #Reset the classifier progress
+                setButtonState("training_finished")
+                #Reset the classifier progress counter
                 classifier.progress = 0
 
 #MARK: Thread 1 handler
@@ -242,13 +215,7 @@ def loadAudio():
         paths = file_paths
         #Since new data is available, reset extracted flag
         already_extracted = False
-        #Enable the extract button, since audio paths are now available
-        extract_button.config(state=NORMAL)
-        #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
-        save_button.config(state=DISABLED)
-        #Lock the model buttons, to avoid confusion, since the new audio files haven't been extracted
-        train_model_button.config(state=DISABLED)
-        predict_genre_button.config(state=DISABLED)
+        setButtonState("loaded_audio")
 
 #MARK: Load CSV
 def loadCSV():
@@ -297,13 +264,7 @@ def loadFolder():
             paths = file_paths
             #Since new data is available, reset extracted flag
             already_extracted = False
-            #Enable the extract button, since audio paths are now available
-            extract_button.config(state=NORMAL)
-            #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
-            save_button.config(state=DISABLED)
-            #Lock the model buttons, to avoid confusion, since the new audio files haven't been extracted
-            train_model_button.config(state=DISABLED)
-            predict_genre_button.config(state=DISABLED)
+            setButtonState("loaded_audio")
 
             file_path_str = ""
             #Add newlines add the end of each path for the gui display
@@ -352,13 +313,8 @@ def loadFolder():
                             paths = file_paths
                             #Since new data is available, reset extracted flag
                             already_extracted = False
-                            #Enable the extract button, since audio paths are now available
-                            extract_button.config(state=NORMAL)
-                            #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
-                            save_button.config(state=DISABLED)
-                            #Lock the model buttons, to avoid confusion, since the new audio files haven't been extracted
-                            train_model_button.config(state=DISABLED)
-                            predict_genre_button.config(state=DISABLED)
+                            #Set the button state accordingly
+                            setButtonState("loaded_audio")
                             
                             file_path_str = ""
                             #Add newlines add the end of each path for the gui display
@@ -411,20 +367,12 @@ def readCSV(csv_path):
             #Since new features have been loaded, reset the saved flag and trained flag
             already_saved = False
             model_already_trained = False
-            #Enable the save button, since features are now available to save
-            save_button.config(state=NORMAL)
-            #Disable the extract button, since old audio files have now been unloaded
-            extract_button.config(state=DISABLED)
-            #Unlock the model buttons, since data is now available
-            train_model_button.config(state=NORMAL)
-            predict_genre_button.config(state=NORMAL)
+            #Update the button state accordingly
+            setButtonState("opened_csv")
     except:
         #Error when opening the csv file
         print(READ_CSV_FAILED_MSG)
         mb.showerror(title="Failed to read file", message=READ_CSV_FAILED_MSG)
-    #TODO: Remove this
-    # print(result_list)
-
 
 #MARK: Save csv
 #Opens file dialog to choose the directory and name to save to
@@ -559,10 +507,10 @@ def startExtraction():
                     feature.spectral_rolloff(y=y, sr=sr),
                     feature.zero_crossing_rate(y=y),
                     #Add helper function to increment progress counter during list execution
-                    # incrementProgressHelper(),
+                    incrementProgressHelper(),
                     #Use an unpacking operator since this returns two values we need
                     *effects.hpss(y=y),
-                    # incrementProgressHelper(),
+                    incrementProgressHelper(),
                     #Use an unpacking operator since this returns a list of lists
                     *feature.mfcc(y=y, sr=sr)
                 ]
@@ -570,8 +518,9 @@ def startExtraction():
                 #Make a feature list, extract the filename from the path, and get length
                 feature_list = [i[i.rindex('/')+1:], librosa.get_duration(y=y, sr=sr)]
                 #Delete the progress helper functions
-                # del feature_function_list[6]
-                # del feature_function_list[7]
+                del feature_function_list[6]
+                #This one is at index 8 since hpss unpacks into two indexes
+                del feature_function_list[8]
                 #Iterate through all functions in the array and get the mean and var
                 for feat in feature_function_list:
                     feature_list.append(mean(feat))
@@ -660,6 +609,55 @@ def trainModelHelper(result_list):
     model_already_trained = True
     #Reset the training progress counter
     classifier.progress = 0
+
+#MARK: Button state
+def setButtonState(key:str):
+    global model_available
+    match key:
+        case "extraction_started":
+            #Lock the extraction button for the duration of the process
+            extract_button.config(state=DISABLED)
+            #Lock the model buttons for the duration of the process
+            train_model_button.config(state=DISABLED)
+            predict_genre_button.config(state=DISABLED)
+        case "extraction_finished":
+            #Unlock save button only after extraction has finished
+            save_button.config(state=NORMAL)
+            #Unlock extract button again
+            extract_button.config(state=NORMAL)
+            #Unlock the model buttons
+            train_model_button.config(state=NORMAL)
+            #Only unlock the prediction button if a model is loaded
+            if model_available:
+                predict_genre_button.config(state=NORMAL)
+        case "training_started":
+            #Lock the model buttons
+            load_model_button.config(state=DISABLED)
+            train_model_button.config(state=DISABLED)
+            predict_genre_button.config(state=DISABLED)
+            save_model_button.config(state=DISABLED)
+        case "training_finished":
+            #Unlock the model buttons after the process
+            load_model_button.config(state=NORMAL)
+            train_model_button.config(state=NORMAL)
+            predict_genre_button.config(state=NORMAL)
+            save_model_button.config(state=NORMAL)
+        case "loaded_audio":
+            #Enable the extract button, since audio paths are now available
+            extract_button.config(state=NORMAL)
+            #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
+            save_button.config(state=DISABLED)
+            #Lock the model buttons, to avoid confusion, since the new audio files haven't been extracted
+            train_model_button.config(state=DISABLED)
+            predict_genre_button.config(state=DISABLED)
+        case "opened_csv":
+            #Enable the save button, since features are now available to save
+            save_button.config(state=NORMAL)
+            #Disable the extract button, since old audio files have now been unloaded
+            extract_button.config(state=DISABLED)
+            #Unlock the model buttons, since data is now available
+            train_model_button.config(state=NORMAL)
+            predict_genre_button.config(state=NORMAL)
 
 #MARK: Wraplength
 #Set the wraplength of the label based on the window size

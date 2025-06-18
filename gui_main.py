@@ -665,8 +665,8 @@ def setWraplength(event, label=None):
     match label:
         #Special case for this label since the contents of the file frame don't change in size
         case "model_loaded_label":
-            #Subtract 23 from the width for due to the scrollbar
-            model_loaded_label.configure(wraplength=event.width-23)
+            #Subtract 30 from the width for due to the scrollbar
+            model_loaded_label.configure(wraplength=event.width-30)
         case _:
             #Subtract 6 from the width for padding
             event.widget.configure(wraplength=event.width-6)
@@ -687,7 +687,7 @@ root.minsize(width=428, height=221)
 root.geometry("428x290")
 
 c = classifier.Classifier()
-file_path = StringVar()
+file_path = StringVar(value="No files selected")
 paths = []
 result_list = []
 file_type = ""
@@ -788,8 +788,8 @@ save_model_button = ttk.Button(model_button_frame, text="Save Model", command=sa
 save_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["save_model_button"]))
 save_model_button.pack(side=LEFT)
 
-#MARK: Paths
-#Scrolling path frame
+#MARK: Scrolling Frame
+#Scrolling center frame
 file_frame = ttk.Frame(root, padding="2 0 2 0")
 #Set the hint text on a mouse hover event
 file_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["file_path_label"]))
@@ -798,17 +798,16 @@ file_frame.pack(padx=2, anchor=W, fill=BOTH, expand=True)
 file_path_frame_helper = ScrolledFrame(file_frame, width=400, height=0)
 #Needs a helper frame to display the contents in
 file_path_frame = file_path_frame_helper.display_widget(Frame)
-# file_path_frame.pack(fill=X, expand=True)
 file_path_frame_helper.pack(anchor=W, expand=True, fill=BOTH)
 model_loaded_label = ttk.Label(file_path_frame, textvariable=model_loaded_text, justify=LEFT)
 file_frame.bind('<Configure>', lambda a: setWraplength(a, label="model_loaded_label"))
-model_loaded_label.pack(fill=X, expand=True)
+model_loaded_label.pack(padx=3, fill=X, expand=True)
 #This label shows the text above the paths
 file_label = ttk.Label(file_path_frame, text="Selected file path(s):")
-file_label.pack(anchor=W)
+file_label.pack(anchor=W, padx=3, pady=(2,0))
 #This label shows the file paths
 file_path_label = ttk.Label(file_path_frame, textvariable=file_path)
-file_path_label.pack(padx=5, pady=2, expand=True)
+file_path_label.pack(padx=3, pady=1, expand=True, anchor=W)
 #Bind scrolling events to the respective windows
 #If scrolling should only be possible inside the frame, it needs to be bound to each label inside
 # file_path_frame_helper.bind_scroll_wheel(file_path_frame_helper)

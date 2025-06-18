@@ -103,6 +103,6 @@ INVALID_INPUT_MSG = "One or more input fields contain invalid inputs! Take a loo
 MODEL_ALREADY_SAVED_MSG = "The loaded model has already been saved in it's current state. Would you like to save it again?"
 MODEL_LOADING_FAILED_MSG = "An error has occured when loading the model. Make sure you have selected the correct file."
 MODEL_ALREADY_TRAINED_MSG = "The current model has already been trained with these parameters and features. Would you like to train it again? You can change the parameters using the input fields above."
-NO_MODEL_MSG = "No model is currently loaded. To load a model at startup, train a model and save it in the same directory as this file.\nTo train a model, either extract features from audio files you select using the buttons above, or load a pre-extracted csv file, then click \"Train Model\"."
+NO_MODEL_MSG = "No model is currently loaded. To load a model at startup, train a model and save it in the same directory as this file.\nTo train a model, either extract features from audio files you select using the buttons above, or load a pre-extracted .csv file; then click \"Train Model\"."
 
 EXTRACTION_STEPS = 7

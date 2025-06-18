@@ -1,5 +1,6 @@
 import pandas as pd
 import tensorflow as tf
+from numpy import array as np_array
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
 from keras import *
@@ -23,12 +24,15 @@ class Classifier:
         self.y_train = None
         self.y_test = None
         self.model = None
+        # self.history = None
+        self.label_encoder = LabelEncoder()
+        self.scaler = MinMaxScaler()
     
     def prepareData(self, data_list):
         #Encode the labels into integers
-        label_encoder = LabelEncoder()
         df = pd.DataFrame(data_list)
-        df[LABEL_INDEX] = label_encoder.fit_transform(df[LABEL_INDEX])
+        #Label encoder is initialised in the __init__ function
+        df[LABEL_INDEX] = self.label_encoder.fit_transform(df[LABEL_INDEX])
         y = df[LABEL_INDEX]
         #Drop label, length and filename columns
         #Also remove the harmony and perceptr columns while they can't be extracted
@@ -36,8 +40,8 @@ class Classifier:
         x = df.drop([FILENAME_INDEX, LENGTH_INDEX, LABEL_INDEX, 14, 15, 16, 17], axis=1)
         #Scale the data
         columns = x.columns
-        minmax = MinMaxScaler()
-        scaled_data = minmax.fit_transform(x)
+        #The scaler is the MinMaxScaler
+        scaled_data = self.scaler.fit_transform(x)
         #Save the scaled data as a dataframe
         x = pd.DataFrame(scaled_data, columns=columns)
         #Split the model into training and testing data
@@ -53,24 +57,27 @@ class Classifier:
         #Input shape is 53, since the table has 60 columns and we dropped 7
         #TODO: Play around with layers
         #TODO: When perceptr and harmony are being used, set input shape to (57,)
-        model.add(Input((53,), batch_size=self.batch_size))
+        model.add(Input(shape=(53,), batch_size=self.batch_size))
         # model.add(Input((57,), batch_size=self.batch_size))
         model.add(Flatten())
-        model.add(Dense(256, activation='relu'))
+        model.add(Dense(units=256, activation='relu'))
         model.add(BatchNormalization())
-        model.add(Dense(128, activation='relu'))
-        model.add(Dropout(0.3))
-        model.add(Dense(10, activation='softmax'))
+        model.add(Dense(units=128, activation='relu'))
+        model.add(Dropout(rate=0.3))
+        model.add(Dense(units=10, activation='softmax'))
         # model.summary()
         #Compile the model
         optimizer = optimizers.Adam(learning_rate=self.learning_rate)
-        model.compile(optimizer=optimizer, loss=losses.SparseCategoricalCrossentropy(), metrics=["accuracy"])
+        model.compile(
+            optimizer=optimizer,
+            loss=losses.SparseCategoricalCrossentropy(),
+            metrics=['accuracy']
+            )
         print("Compiled Model")
         self.model = model
     
     def trainModel(self):
         #Fit the model with the parameters set in the gui
-        #TODO: Show progress in the gui
         history = self.model.fit(
                     x=self.x_train,
                     y=self.y_train,
@@ -90,19 +97,45 @@ class Classifier:
         stripped_data = []
         #Drop the filename, length and label columns + harmony and perceptr features
         try:
+            #Loop through all selected files
             for i in data:
+                #Remove the filename, length, harmony, perceptr and label values
                 stripped_list = i[2:14] + i[18:-1]
-                stripped_data.append(stripped_list)
-            #TODO: This currently crashes
-            prediction = self.model.predict(x=stripped_data[0], batch_size=53)
-            print("Test")
-            print(f"Predicted Genre: {prediction}")
-            return prediction
+                #Shape the features to (-1, 1)
+                shaped_list = np_array(stripped_list).reshape(1, -1)
+                #Scale the features using the MinMaxScaler
+                scaled_list = self.scaler.transform(shaped_list)
+                #Add the feature list to the list of songs to predict
+                stripped_data.append(scaled_list)
+            #Predict the genre
+            #TODO: Currently only predicts the first in the list
+            result_list = []
+            for song_data in stripped_data:
+                prediction = self.model.predict(x=song_data)[0]
+                prediction = [f"{item*100:.2f}%" for item in prediction]
+                #Multiply prediction by 100 to get the percentage
+                result = list(zip(self.label_encoder.classes_, prediction))
+                result.sort(key=lambda a: a[1], reverse=True)
+                print(f"Predicted Genres: {result}")
+                #TODO: When the result is displayed in a better way, rework this
+                #Return only the most likely result to display on the hint text
+                result_list.append(result[0])
+            #If only one result is available, return the result as a string
+            if len(result_list) == 1:
+                return f"{result_list[0][0]} with a probability of {result_list[0][1]}"
+            #If more, then loop through all of them and prepend their number
+            else:
+                result_string = ""
+                for idx, genre in enumerate(result_list):
+                    result_string += f"{idx+1}: {genre[0]} with a probability of {genre[1]}\n"
+                #Cut off the last newline when returning
+                return result_string[:-1]
         except:
             print("Prediction failed, likely due to a wrong format")
     
     def loadModel(self, file_path):
-        return saving.load_model(file_path)
+        self.model = saving.load_model(file_path)
+        # return saving.load_model(file_path)
     
 class Callback(callbacks.Callback):
     def __init__(self):

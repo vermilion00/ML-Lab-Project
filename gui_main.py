@@ -19,7 +19,11 @@
 # Add button to show/hide model parameter options
 # Add a message showing which files have been extracted
 # Add a message showing that the model is loaded or not
-# Progress bar doesn't reset properly, doesn't show up a second time
+# Rework extract function list to include parameters?
+# Add button to compute and show confusion matrices
+# Loading model from file doesn't seem to work, prediction fails
+# Loading model works after training, so theres probably a flag not being set
+# Extract files automatically after loading instead of clicking extra button?
 
 from constants import *
 import classifier
@@ -179,6 +183,8 @@ def thread1_handler():
             time.sleep(0.1)
 
 #MARK: Thread 2 Handler
+#Not my favourite way of updating progress but I don't know a better way to show training
+#progress when that code is in a separate file
 def thread2_handler():
     global extraction_progress
     local_extraction_progress = 0
@@ -253,8 +259,8 @@ def loadCSV():
     )
     if file_path_str != "":
         file_path.set(file_path_str)
-        paths = []
         #Reset selected audio file paths if csv is selected
+        paths = []
         readCSV(file_path_str)
 
 #MARK: Load Folder
@@ -497,7 +503,7 @@ def loadModelHelper():
     if file_path_str != "":
         try:
             #Load the selected model
-            c.model = c.loadModel(file_path_str)
+            c.loadModel(file_path_str)
             #Reset the Model Saved flag
             model_already_saved = False
             #Set the model_available flag
@@ -572,9 +578,6 @@ def startExtraction():
                 extraction_progress += EXTRACTION_STEPS
                 print(f"A file at {i} could not be opened.")
                 mb.showerror(title="Invalid file", message=f"The file \"{i[i.rindex('/')+1:]}\" at path \"{i[:i.rindex('/')+1]}\" could not be opened. The extraction will continue without it.")
-        
-        #Reset the progress counter after the entire process is done
-        progress = 0
     #No files are selected
     else:
         mb.showerror(title="No files selected", message=NO_FILES_MSG)
@@ -682,19 +685,6 @@ epochs = IntVar(value=c.epochs)
 test_size = DoubleVar(value=c.test_size)
 batch_size = IntVar(value=c.batch_size)
 random_state = IntVar(value=c.random_state)
-
-#Load a model at startup if it is saved in the starting directory
-try:
-    #If multiple models are in the starting directory, load the first one found
-    model_path = glob("*.keras")[0]
-    c.model = c.loadModel(model_path)
-    hint_text.set(f"Loaded model \"{model_path}\" from the default directory.")
-    print(f"Loaded model \"{model_path}\" from the default directory.")
-    #Set the model available flag
-    model_available = True
-#No model found/malformed file
-except:
-    pass
 
 #MARK: Buttons
 #Make a new frame to group the related buttons together
@@ -813,6 +803,22 @@ progress_text_label = ttk.Label(progress_text_frame, textvariable=progress_text,
 progress_text_label.pack(side=LEFT)
 progress_number_label = ttk.Label(progress_text_frame, textvariable=progress_number, justify=CENTER)
 progress_number_label.pack(side=LEFT)
+
+#Load a model at startup if it is saved in the starting directory
+try:
+    #If multiple models are in the starting directory, load the first one found
+    model_path = glob("*.keras")[0]
+    c.loadModel(model_path)
+    hint_text.set(f"Loaded model \"{model_path}\" from the default directory.")
+    print(f"Loaded model \"{model_path}\" from the default directory.")
+    #Set the model available flag
+    model_available = True
+    #Unlock the predict genre and save model buttons
+    # predict_genre_button.config(state=NORMAL)
+    # save_model_button.config(state=NORMAL)
+#No model found/malformed file
+except:
+    pass
 
 root.mainloop()
 

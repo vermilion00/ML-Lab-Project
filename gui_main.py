@@ -37,6 +37,9 @@ import csv
 import librosa
 from librosa import feature, effects, beat
 from glob import glob
+import joblib
+from os import path
+from sys import argv
 
 #TODO: Remove this if not needed
 # #Make save folder if it doesn't exist
@@ -143,11 +146,11 @@ def thread1_handler():
             trainModelHelper(result_list)
         elif predict_genre_flag.is_set():
             predict_genre_flag.clear()
-            # hint_text.set(c.predictGenre(result_list))
             file_path.set(file_path.get()+'\n'+c.predictGenre(result_list))
+            hint_text.set("Prediction done")
         elif save_model_flag.is_set():
             save_model_flag.clear()
-            saveModel(c.model)
+            saveModel()
         elif load_model_flag.is_set():
             load_model_flag.clear()
             loadModelHelper()
@@ -409,7 +412,7 @@ def saveCSV():
         mb.showerror(title="No data available", message=NO_DATA_MSG)
 
 #MARK: Save Model
-def saveModel(model):
+def saveModel():
     global model_already_saved
     #If the model has already been saved, ask if it should be saved again
     if model_already_saved and not mb.askyesno(title="Save again?", message=MODEL_ALREADY_SAVED_MSG):
@@ -421,18 +424,25 @@ def saveModel(model):
     title = "Choose a directory and file name to save the model to"
     #Set the default name of the saved file
     default_name = "model.keras"
-    filename = fd.asksaveasfilename(filetypes=filetype, defaultextension=filetype, title=title, initialfile=default_name)
+    filename = fd.asksaveasfilename(
+        filetypes=filetype,
+        defaultextension=filetype,
+        title=title,
+        initialfile=default_name,
+        initialdir=current_dir
+    )
     #If filename is empty, the save prompt has been canceled
     if filename != "":
         #Catch errors when writing to file
         try:
-            #Save the model to the selected file path
-            c.model.save(filename)
+            #Combine the model, scaler and label encoder into one List
+            obj_list = [c.model, c.scaler, c.label_encoder]
+            #Save the list to the selected path
+            joblib.dump(obj_list, filename)
             #Set the saved flag
             model_already_saved = True
             hint_text.set("Saved model")
         except Exception as e:
-            #TODO: Adjust this message
             print(OVERWRITE_FAILED_MSG)
             mb.showerror(title="Failed to save file", message=OVERWRITE_FAILED_MSG + f'\n{e}')
 
@@ -448,24 +458,26 @@ def loadModelHelper():
     #Only allow selecting one file here
     file_path_str = fd.askopenfilename(
         title = 'Select the keras model file you wish to load',
-        filetypes = filetypes
+        filetypes = filetypes,
+        initialdir=current_dir
     )
     #Check if a file has been selected
     if file_path_str != "":
         try:
             #Prepare the data to fit the scaler
-            c.prepareData(result_list)
+            # c.prepareData(result_list)
             #Load the selected model
             c.loadModel(file_path_str)
             #Reset the Model Saved flag
             model_already_saved = False
             #Set the model_available flag
             model_available = True
+            setButtonState("loaded_model")
             model_loaded_text.set(f"Model status: Loaded model \"{file_path_str}\"")
             hint_text.set(f"Loaded model \"{file_path_str}\"")
         except Exception as e:
             print("Failed to load model")
-            mb.showerror(title="Failed to load model", message=MODEL_LOADING_FAILED_MSG + f'\n{e}')
+            mb.showerror(title="Failed to load model or scaler", message=MODEL_LOADING_FAILED_MSG + f'\n{e}')
 
 
 #A helper function to increment progress counter during list execution
@@ -613,6 +625,7 @@ def trainModelHelper(result_list):
 #MARK: Button state
 def setButtonState(key:str):
     global model_available
+    global already_extracted
     match key:
         case "extraction_started":
             #Lock the extraction button for the duration of the process
@@ -657,7 +670,15 @@ def setButtonState(key:str):
             extract_button.config(state=DISABLED)
             #Unlock the model buttons, since data is now available
             train_model_button.config(state=NORMAL)
-            predict_genre_button.config(state=NORMAL)
+            #Only unlock the predict genre button if a model is available
+            if model_available:
+                predict_genre_button.config(state=NORMAL)
+        case "loaded_model":
+            save_model_button.config(state=NORMAL)
+            #If the selected files have been extracted, unlock predict genre button
+            if already_extracted:
+                predict_genre_button.config(state=NORMAL)
+
 
 #MARK: Wraplength
 #Set the wraplength of the label based on the window size
@@ -711,6 +732,7 @@ epochs = IntVar(value=c.epochs)
 test_size = DoubleVar(value=c.test_size)
 batch_size = IntVar(value=c.batch_size)
 random_state = IntVar(value=c.random_state)
+current_dir = path.dirname(path.abspath(argv[0]))
 
 #MARK: Buttons
 #Make a new frame to group the related buttons together
@@ -845,6 +867,7 @@ try:
     #Update the model loaded text
     model_loaded_text.set(f"Model status: Loaded model \"{model_path}\" from the default directory.")
     #Set the model available flag
+    setButtonState("loaded_model")
     model_available = True
 #No model found/malformed file
 except:

@@ -25,7 +25,7 @@ HINT_TEXT = {
     "train_model_button": "Click to train the model with the loaded feature set using the parameters set above. This also scales the features and splits the feature set. The process will take a while.",
     "predict_genre_button": "Click to predict the genre of the loaded feature set(s).",
     "save_model_button": "Click to save the current model to a file. Only available when a model is loaded.",
-    "load_model_button": "Click to load a trained model from a .keras file."
+    "load_model_button": "Click to load a trained model from a .keras file. Automatically loads the corresponding scaler and encoder files"
 }
 
 HEADER = (
@@ -101,7 +101,7 @@ ALREADY_SAVED_MSG = "The currently loaded features have already been saved. Woul
 SEARCH_SUBFOLDERS_MSG = "The selected folder contains no files to load, but subfolders have been detected. Would you like to recursively search all subfolders for audio files?"
 INVALID_INPUT_MSG = "One or more input fields contain invalid inputs! Take a look at the hint regarding each input field to see what field accepts what input, and use a dot as a decimal separator for floating point numbers."
 MODEL_ALREADY_SAVED_MSG = "The loaded model has already been saved in it's current state. Would you like to save it again?"
-MODEL_LOADING_FAILED_MSG = "An error has occured when loading the model. Make sure you have selected the correct file."
+MODEL_LOADING_FAILED_MSG = "An error has occured when loading the model. Make sure you have selected the correct file, and the .scaler file is not missing."
 MODEL_ALREADY_TRAINED_MSG = "The current model has already been trained with these parameters and features. Would you like to train it again? You can change the parameters using the input fields above."
 NO_MODEL_MSG = "No model is currently loaded. To load a model at startup, train a model and save it in the same directory as this file.\nTo train a model, either extract features from audio files you select using the buttons above, or load a pre-extracted .csv file; then click \"Train Model\"."
 

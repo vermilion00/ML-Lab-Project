@@ -5,6 +5,7 @@ from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
 from keras import *
 from keras.api.layers import *
+import joblib
 
 #Label column index
 FILENAME_INDEX = 0
@@ -29,7 +30,6 @@ class Classifier:
         # self.history = None
         self.label_encoder = LabelEncoder()
         self.scaler = MinMaxScaler()
-        self.scaler = None
     
     #MARK: Prepare Data
     def prepareData(self, data_list):
@@ -43,7 +43,6 @@ class Classifier:
         #Scale the data
         columns = x.columns
         #The scaler is the MinMaxScaler
-        self.scaler = MinMaxScaler()
         scaled_data = self.scaler.fit_transform(x)
         #Save the scaled data as a dataframe
         x = pd.DataFrame(scaled_data, columns=columns)
@@ -146,8 +145,10 @@ class Classifier:
     
     #MARK: Load Model
     def loadModel(self, file_path):
-        self.model = saving.load_model(file_path)
-        # return saving.load_model(file_path)
+        #Load the keras file containing the model, scaler and label encoder
+        obj_list = joblib.load(file_path)
+        #Assign the read objects to the respective variables
+        self.model, self.scaler, self.label_encoder = obj_list[0], obj_list[1], obj_list[2]
     
 #MARK: Callback
 class Callback(callbacks.Callback):

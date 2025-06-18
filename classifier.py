@@ -25,9 +25,11 @@ class Classifier:
         self.y_train = None
         self.y_test = None
         self.model = None
+        self.history = None
         # self.history = None
         self.label_encoder = LabelEncoder()
         self.scaler = MinMaxScaler()
+        self.scaler = None
     
     #MARK: Prepare Data
     def prepareData(self, data_list):
@@ -41,6 +43,7 @@ class Classifier:
         #Scale the data
         columns = x.columns
         #The scaler is the MinMaxScaler
+        self.scaler = MinMaxScaler()
         scaled_data = self.scaler.fit_transform(x)
         #Save the scaled data as a dataframe
         x = pd.DataFrame(scaled_data, columns=columns)
@@ -78,7 +81,7 @@ class Classifier:
     #MARK: Train Model
     def trainModel(self):
         #Fit the model with the parameters set in the gui
-        history = self.model.fit(
+        self.history = self.model.fit(
                     x=self.x_train,
                     y=self.y_train,
                     epochs=self.epochs,
@@ -109,34 +112,39 @@ class Classifier:
                 #Add the feature list to the list of songs to predict
                 stripped_data.append(scaled_list)
             #Predict the genre
-            #TODO: Currently only predicts the first in the list
             result_list = []
             for song_data in stripped_data:
+                #Make the prediction
                 prediction = self.model.predict(x=song_data)[0]
-                #Format the prediction
-                #Multiply prediction by 100 to get the percentage
-                prediction = [f"{item*100:.2f}%" for item in prediction]
+                #Combine the prediction with the corresponding class
                 result = list(zip(self.label_encoder.classes_, prediction))
+                #Sort the list so that the highest probability is first
                 result.sort(key=lambda a: a[1], reverse=True)
-                print(f"Predicted Genres: {result}")
+                new_result = []
+                for item in result:
+                    #Format the probability to show a percentage
+                    #Capitalize the genre because the labels are lower case
+                    new_result.append((item[0].capitalize(), f'{item[1]*100:.2f}%'))
+                print(f"Predicted Genres: {new_result}")
                 #TODO: When the result is displayed in a better way, rework this
                 #Return only the most likely result to display on the hint text
-                result_list.append(result[0])
+                result_list.append(new_result[0])
             #If only one result is available, return the result as a string
             if len(result_list) == 1:
                 #Double indexing because result_list is a tuple within a list
-                #Capitalize the genre because the labels are lower case
-                return f"{result_list[0][0].capitalize()} with a probability of {result_list[0][1]}"
+                return f"Predicted Genre: {result_list[0][0]} with a probability of {result_list[0][1]}"
             #If more, then loop through all of them and prepend their number
             else:
                 result_string = ""
                 for idx, genre in enumerate(result_list):
-                    result_string += f"{idx+1}: {genre[0].capitalize()} with a probability of {genre[1]}\n"
+                    result_string += f"File {idx+1}: {genre[0]} with a probability of {genre[1]}\n"
                 #Cut off the last newline when returning
-                return result_string[:-1]
-        except:
-            print("Prediction failed, likely due to a wrong format")
+                return "Predicted Genres:\n" + result_string[:-1]
+        except Exception as e:
+            print(e)
+            return e
     
+    #MARK: Load Model
     def loadModel(self, file_path):
         self.model = saving.load_model(file_path)
         # return saving.load_model(file_path)

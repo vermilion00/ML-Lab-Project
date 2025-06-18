@@ -3,7 +3,8 @@ SAVE_FILE = SAVE_DIR + "/" + "features.csv"
 FORBIDDEN_CHARS = r'[\\/:*?"<>|]' #Not allowed in windows file names
 
 HINT_TEXT = {
-    "program_start": "If you have a model file placed in the default directory, it will be loaded at program start. To train a model, either load and extract features from audio files or select a pre-extracted feature file, then click \"Train model\". To classify audio, you need to have a model loaded. Select the audio files and extract their features before predicting their genre.",
+    "program_start": "Hover over an element to see an explanation.",
+    "program_start_long": "If you have a model file placed in the default directory, it will be loaded at program start. To train a model, either load and extract features from audio files or select a pre-extracted feature file, then click \"Train model\". To classify audio, you need to have a model loaded. Select the audio files and extract their features before predicting their genre.",
     "load_file_button": "Click to select the audio file(s) you wish to import.",
     "load_csv_file_button": "Click to select a pre-extracted feature list.",
     "load_folder_button": "Click to select a folder containing the audio files you wish to import.",
@@ -22,7 +23,7 @@ HINT_TEXT = {
     "random_state": "Input the random state for the model as an Int.",
     "test_size": "Input the test size for the model as a float.",
     "train_model_button": "Click to train the model with the loaded feature set using the parameters set above. This also scales the features and splits the feature set. The process will take a while.",
-    "predict_genre_button": "Click to predict the genre of the loaded feature set(s). Currently non-functional.",
+    "predict_genre_button": "Click to predict the genre of the loaded feature set(s).",
     "save_model_button": "Click to save the current model to a file. Only available when a model is loaded.",
     "load_model_button": "Click to load a trained model from a .keras file."
 }
@@ -102,6 +103,6 @@ INVALID_INPUT_MSG = "One or more input fields contain invalid inputs! Take a loo
 MODEL_ALREADY_SAVED_MSG = "The loaded model has already been saved in it's current state. Would you like to save it again?"
 MODEL_LOADING_FAILED_MSG = "An error has occured when loading the model. Make sure you have selected the correct file."
 MODEL_ALREADY_TRAINED_MSG = "The current model has already been trained with these parameters and features. Would you like to train it again? You can change the parameters using the input fields above."
-NO_MODEL_MSG = "No model is currently loaded. To load a model at startup, save it in the same directory as this file."
+NO_MODEL_MSG = "No model is currently loaded. To load a model at startup, train a model and save it in the same directory as this file.\nTo train a model, either extract features from audio files you select using the buttons above, or load a pre-extracted csv file, then click \"Train Model\"."
 
 EXTRACTION_STEPS = 7

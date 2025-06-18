@@ -1,9 +1,3 @@
-#Show spectrogram of file to be classified?
-#Allow training the model via gui
-#Input training parameters, add button to reset to default params
-#Choose between different models
-#Use askopenfilenames to allow selecting multiple files, then iterate through all of them
-
 # TODO:
 # How is the duration calculated in the dataset?
 # Is it important that the calculated values differ slightly from the dataset values?
@@ -12,9 +6,11 @@
 # Play around with ttk styling
 # Glob files in single lookup instead of looping over each ending
 # Fix being able to scroll up past first path for some reason
-# Add option to append to data with new selection, instead of overwriting it
 # Add option to show waveplots/spectrograms
 # Add button to save new default parameters
+#
+# Fixes to bug:
+# Add option to append to data with new selection, instead of overwriting it
 # Add button to show/hide model parameter options
 # Add a message showing which files have been extracted
 # Add a message showing that the model is loaded or not
@@ -24,7 +20,7 @@
 # Extract files automatically after loading instead of clicking extra button?
 # Make progress bar progress more uniform - get rid of perceptr and harmony, tempo?
 # - Calls to their functions take too long
-# Program crashes if the first two progress += 1 calls happen too fast
+# Program crashes if the first three progress += 1 calls happen too fast
 # Speed up startup somehow
 
 from constants import *
@@ -147,7 +143,8 @@ def thread1_handler():
             trainModelHelper(result_list)
         elif predict_genre_flag.is_set():
             predict_genre_flag.clear()
-            hint_text.set(c.predictGenre(result_list))
+            # hint_text.set(c.predictGenre(result_list))
+            file_path.set(file_path.get()+'\n'+c.predictGenre(result_list))
         elif save_model_flag.is_set():
             save_model_flag.clear()
             saveModel(c.model)
@@ -332,7 +329,7 @@ def loadFolder():
                 hint_text.set(HINT_TEXT["no_files_found"])
 
 #MARK: Read CSV
-#Reads the features in a csv into memory
+#Reads the features in a csv file into memory
 def readCSV(csv_path):
     global result_list
     global already_saved
@@ -430,7 +427,7 @@ def saveModel(model):
         #Catch errors when writing to file
         try:
             #Save the model to the selected file path
-            model.save(filename)
+            c.model.save(filename)
             #Set the saved flag
             model_already_saved = True
             hint_text.set("Saved model")
@@ -443,6 +440,7 @@ def saveModel(model):
 def loadModelHelper():
     global model_already_saved
     global model_available
+    global result_list
     filetypes = (
         ('Keras model file', '*.keras'),
         ('All files', '*.*')
@@ -455,12 +453,15 @@ def loadModelHelper():
     #Check if a file has been selected
     if file_path_str != "":
         try:
+            #Prepare the data to fit the scaler
+            c.prepareData(result_list)
             #Load the selected model
             c.loadModel(file_path_str)
             #Reset the Model Saved flag
             model_already_saved = False
             #Set the model_available flag
             model_available = True
+            model_loaded_text.set(f"Model status: Loaded model \"{file_path_str}\"")
             hint_text.set(f"Loaded model \"{file_path_str}\"")
         except Exception as e:
             print("Failed to load model")
@@ -593,20 +594,19 @@ def trainModelHelper(result_list):
     c.prepareData(result_list)
     #Build the model
     c.buildModel()
-    #TODO: Update progress bar, lock buttons
-    #Post training updates in path screen, update descriptor
-    #Update wrap length of path screen according to dimensions
     #Train the model
     c.trainModel()
-    #Enable the Save Model button
-    save_model_button.config(state=NORMAL)
+    #Set the new button state
+    setButtonState("training_finished")
+    #Update labels
+    model_loaded_text.set("Model status: Training complete - Model loaded")
     hint_text.set("Model training complete")
     #Reset the saved model flag, since it's been trained again
     model_already_saved = False
     #Set the model available flag
     model_available = True
-    #Set the model already trained flag
-    model_already_trained = True
+    #Reset the model already trained flag
+    model_already_trained = False
     #Reset the training progress counter
     classifier.progress = 0
 
@@ -661,9 +661,15 @@ def setButtonState(key:str):
 
 #MARK: Wraplength
 #Set the wraplength of the label based on the window size
-def setWraplength(event):
-    #Subtract 6 from the width for padding
-    event.widget.configure(wraplength=event.width-6)
+def setWraplength(event, label=None):
+    match label:
+        #Special case for this label since the contents of the file frame don't change in size
+        case "model_loaded_label":
+            #Subtract 23 from the width for due to the scrollbar
+            model_loaded_label.configure(wraplength=event.width-23)
+        case _:
+            #Subtract 6 from the width for padding
+            event.widget.configure(wraplength=event.width-6)
 
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still
@@ -686,6 +692,7 @@ paths = []
 result_list = []
 file_type = ""
 #Initialise the hint text with the startup message
+model_loaded_text = StringVar(value="Model status: No model loaded")
 hint_text = StringVar(value=HINT_TEXT["program_start"])
 progress_text = StringVar()
 progress_number = StringVar()
@@ -787,21 +794,27 @@ file_frame = ttk.Frame(root, padding="2 0 2 0")
 #Set the hint text on a mouse hover event
 file_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["file_path_label"]))
 file_frame.pack(padx=2, anchor=W, fill=BOTH, expand=True)
-#This label shows the text above the paths
-file_label = ttk.Label(file_frame, text="Selected file path(s):")
-file_label.pack(side=TOP, anchor=W)
 #Create the scrolled frame
-file_path_frame = ScrolledFrame(file_frame, width=400, height=0)
+file_path_frame_helper = ScrolledFrame(file_frame, width=400, height=0)
 #Needs a helper frame to display the contents in
-file_path_helper_frame = file_path_frame.display_widget(Frame)
-file_path_frame.pack(anchor=W, expand=True, fill=BOTH)
+file_path_frame = file_path_frame_helper.display_widget(Frame)
+# file_path_frame.pack(fill=X, expand=True)
+file_path_frame_helper.pack(anchor=W, expand=True, fill=BOTH)
+model_loaded_label = ttk.Label(file_path_frame, textvariable=model_loaded_text, justify=LEFT)
+file_frame.bind('<Configure>', lambda a: setWraplength(a, label="model_loaded_label"))
+model_loaded_label.pack(fill=X, expand=True)
+#This label shows the text above the paths
+file_label = ttk.Label(file_path_frame, text="Selected file path(s):")
+file_label.pack(anchor=W)
 #This label shows the file paths
-file_path_label = ttk.Label(file_path_helper_frame, textvariable=file_path)
-#Bind scrolling events to the respective windows
-file_path_frame.bind_scroll_wheel(file_path_frame)
-file_path_frame.bind_scroll_wheel(file_path_label)
-file_path_frame.bind_arrow_keys(root)
+file_path_label = ttk.Label(file_path_frame, textvariable=file_path)
 file_path_label.pack(padx=5, pady=2, expand=True)
+#Bind scrolling events to the respective windows
+#If scrolling should only be possible inside the frame, it needs to be bound to each label inside
+# file_path_frame_helper.bind_scroll_wheel(file_path_frame_helper)
+# file_path_frame_helper.bind_scroll_wheel(file_path_label)
+file_path_frame_helper.bind_scroll_wheel(root)
+file_path_frame_helper.bind_arrow_keys(root)
 
 #MARK: Hint label
 #For labels with dynamic wrap length, justify=CENTER, anchor=N and fill=X needs to be set for it to be centered
@@ -830,14 +843,13 @@ try:
     c.loadModel(model_path)
     hint_text.set(f"Loaded model \"{model_path}\" from the default directory.")
     print(f"Loaded model \"{model_path}\" from the default directory.")
+    #Update the model loaded text
+    model_loaded_text.set(f"Model status: Loaded model \"{model_path}\" from the default directory.")
     #Set the model available flag
     model_available = True
-    #Unlock the predict genre and save model buttons
-    # predict_genre_button.config(state=NORMAL)
-    # save_model_button.config(state=NORMAL)
 #No model found/malformed file
 except:
-    mb.showinfo(title="No model loaded", message=NO_MODEL_MSG)
+    model_loaded_text.set("Model status: " + NO_MODEL_MSG)
     print("No model loaded")
 
 root.mainloop()

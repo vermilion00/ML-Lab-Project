@@ -168,7 +168,7 @@ class Classifier:
         #Get the accuracy and loss from the saved list
         self.test_acc, self.test_loss = obj_list[3], obj_list[4]
     
-#MARK: Callback
+#MARK: Callback class
 class Callback(callbacks.Callback):
     def __init__(self):
         self.progress = 0

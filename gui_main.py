@@ -204,6 +204,8 @@ def loadAudio():
         paths = file_paths
         #Since new data is available, reset extracted flag
         already_extracted = False
+        #Extract files after loading them
+        extract_flag.set()
         setButtonState("loaded_audio")
 
 #MARK: Load CSV
@@ -253,6 +255,8 @@ def loadFolder():
             paths = file_paths
             #Since new data is available, reset extracted flag
             already_extracted = False
+            #Extract files after loading them
+            extract_flag.set()
             setButtonState("loaded_audio")
 
             file_path_str = ""
@@ -302,6 +306,8 @@ def loadFolder():
                             paths = file_paths
                             #Since new data is available, reset extracted flag
                             already_extracted = False
+                            #Extract files after loading them
+                            extract_flag.set()
                             #Set the button state accordingly
                             setButtonState("loaded_audio")
                             
@@ -316,7 +322,7 @@ def loadFolder():
                             file_path.set(file_path_str)
                         #No files found in subfolders
                         else:
-                            mb.showinfo(title="No files found", message="No files have been found in all subfolders.")
+                            mb.showinfo(title="No files found", message="No files have been found in any subfolders.")
 
                 hint_text.set(HINT_TEXT["no_files_found"])
 
@@ -613,7 +619,7 @@ def setButtonState(key:str):
     match key:
         case "extraction_started":
             #Lock the extraction button for the duration of the process
-            extract_button.config(state=DISABLED)
+            # extract_button.config(state=DISABLED)
             #Lock the model buttons for the duration of the process
             train_model_button.config(state=DISABLED)
             predict_genre_button.config(state=DISABLED)
@@ -621,7 +627,7 @@ def setButtonState(key:str):
             #Unlock save button only after extraction has finished
             save_button.config(state=NORMAL)
             #Unlock extract button again
-            extract_button.config(state=NORMAL)
+            # extract_button.config(state=NORMAL)
             #Unlock the model buttons
             train_model_button.config(state=NORMAL)
             #Only unlock the prediction button if a model is loaded
@@ -641,7 +647,7 @@ def setButtonState(key:str):
             save_model_button.config(state=NORMAL)
         case "loaded_audio":
             #Enable the extract button, since audio paths are now available
-            extract_button.config(state=NORMAL)
+            # extract_button.config(state=NORMAL)
             #Disable the save button, to avoid confusion, since the new audio files haven't been extracted
             save_button.config(state=DISABLED)
             #Lock the model buttons, to avoid confusion, since the new audio files haven't been extracted
@@ -651,7 +657,7 @@ def setButtonState(key:str):
             #Enable the save button, since features are now available to save
             save_button.config(state=NORMAL)
             #Disable the extract button, since old audio files have now been unloaded
-            extract_button.config(state=DISABLED)
+            # extract_button.config(state=DISABLED)
             #Unlock the model buttons, since data is now available
             train_model_button.config(state=NORMAL)
             #Only unlock the predict genre button if a model is available
@@ -721,7 +727,7 @@ current_dir = path.dirname(path.abspath(argv[0]))
 #MARK: Buttons
 #Make a new frame to group the related buttons together
 button_frame = ttk.Frame(root, padding="2 0 2 0")
-button_frame.pack(anchor=W)
+button_frame.pack(anchor=N)
 #Create a button widget
 load_file_button = ttk.Button(button_frame, text="Load Audio", command=lambda:loadFileHelper("audio"), padding="2 2 2 2")
 #Set an event to happen if the mouse cursor hovers over the load file button
@@ -735,16 +741,16 @@ load_folder_button.pack(side=LEFT, padx=1, pady=2)
 load_csv_file_button = ttk.Button(button_frame, text="Load Features", command=lambda:loadFileHelper("csv"), padding="2 2 2 2")
 load_csv_file_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_csv_file_button"]))
 load_csv_file_button.pack(side=LEFT, padx=1, pady=2)
-extract_button = ttk.Button(button_frame, text="Extract features", command=extract_flag.set, padding="2 2 2 2", state=DISABLED)
-extract_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["extract_button"]))
-extract_button.pack(side=LEFT, padx=1, pady=2)
+# extract_button = ttk.Button(button_frame, text="Extract features", command=extract_flag.set, padding="2 2 2 2", state=DISABLED)
+# extract_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["extract_button"]))
+# extract_button.pack(side=LEFT, padx=1, pady=2)
 save_button = ttk.Button(button_frame, text="Save CSV", command=save_file_flag.set, padding="2 2 2 2", state=DISABLED)
 save_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["save_button"]))
 save_button.pack(side=LEFT, padx=1, pady=2)
 
 #MARK: Model Entries
 model_frame = ttk.Frame(root, padding="0 2 0 2")
-model_frame.pack(anchor=NW)
+model_frame.pack(anchor=N)
 model_entry_frame = ttk.Frame(model_frame, padding="2 2 2 2")
 model_entry_frame.pack()
 #Learning rate elements

@@ -8,24 +8,24 @@
 # Fix being able to scroll up past first path for some reason
 # Add option to show waveplots/spectrograms
 # Add button to save new default parameters
+# Add option to paste in link and classify audio
 #
 # Fixes to bug:
 # Add option to append to data with new selection, instead of overwriting it
 # Add button to show/hide model parameter options
 # Add a message showing which files have been extracted
-# Add a message showing that the model is loaded or not
 # Add button to compute and show confusion matrices
-# Loading model from file doesn't seem to work, prediction fails
-# Loading model works after training, so theres probably a flag not being set
 # Extract files automatically after loading instead of clicking extra button?
 # Make progress bar progress more uniform - get rid of perceptr and harmony, tempo?
 # - Calls to their functions take too long
 # Program crashes if the first three progress += 1 calls happen too fast
 # Speed up startup somehow
+# Separate first x songs from each class out for testing (first 5 of each?)
+# Add message showing which ones belong there
 
 from constants import *
 import classifier
-from numpy import mean, var
+import numpy as np
 import time
 from tkinter import *
 from tkinter import ttk
@@ -40,18 +40,6 @@ from glob import glob
 import joblib
 from os import path
 from sys import argv
-
-#TODO: Remove this if not needed
-# #Make save folder if it doesn't exist
-# from os import makedirs, path, remove, name
-# if not path.exists(SAVE_DIR):
-#     makedirs(SAVE_DIR)
-# #Check if running on windows
-# if name == 'nt':
-#     #Only import this when it's needed
-#     from ctypes import windll
-#     #Set folder to be hidden
-#     ret = windll.kernel32.SetFileAttributesW(SAVE_DIR, 0x02)
 
 #MARK: Threading events
 extract_flag = threading.Event()
@@ -146,7 +134,8 @@ def thread1_handler():
             trainModelHelper(result_list)
         elif predict_genre_flag.is_set():
             predict_genre_flag.clear()
-            file_path.set(file_path.get()+'\n'+c.predictGenre(result_list))
+            #Append the predicted genres to the file path
+            file_path.set(file_path.get()+'\n\n'+c.predictGenre(result_list))
             hint_text.set("Prediction done")
         elif save_model_flag.is_set():
             save_model_flag.clear()
@@ -436,7 +425,7 @@ def saveModel():
         #Catch errors when writing to file
         try:
             #Combine the model, scaler and label encoder into one List
-            obj_list = [c.model, c.scaler, c.label_encoder]
+            obj_list = [c.model, c.scaler, c.label_encoder, c.test_acc, c.test_loss]
             #Save the list to the selected path
             joblib.dump(obj_list, filename)
             #Set the saved flag
@@ -464,8 +453,6 @@ def loadModelHelper():
     #Check if a file has been selected
     if file_path_str != "":
         try:
-            #Prepare the data to fit the scaler
-            # c.prepareData(result_list)
             #Load the selected model
             c.loadModel(file_path_str)
             #Reset the Model Saved flag
@@ -502,8 +489,6 @@ def startExtraction():
     #TODO: Check if paths can be a tuple here - prob not relevant since button is locked anyway
     if paths != []:
         result_list = []
-        #TODO: Remove this
-        # start = time.time()
         #Iterate over every selected path and extract the audio features
         for i in paths:
             try:
@@ -536,8 +521,8 @@ def startExtraction():
                 del feature_function_list[8]
                 #Iterate through all functions in the array and get the mean and var
                 for feat in feature_function_list:
-                    feature_list.append(mean(feat))
-                    feature_list.append(var(feat))
+                    feature_list.append(np.mean(feat))
+                    feature_list.append(np.var(feat))
                 extraction_progress += 1
                 #Insert the tempo, since the return format is different and no mean or var is needed
                 #Unpack and save the first value, since the rest is not needed
@@ -573,8 +558,7 @@ def trainModelHelper(result_list):
     global model_available
     params_changed = False
     try:
-        #Check if the parameters have been changed
-        # if learning_rate.get() != c.learning_rate or c.epochs != epochs.get() or c.batch_size != batch_size.get() or c.test_size != test_size.get() or c.random_state != random_state.get():
+        #Check if the parameters have changed
         #Update the parameters with the respective entry values
         if learning_rate.get() != c.learning_rate:
             c.learning_rate = learning_rate.get()
@@ -607,11 +591,13 @@ def trainModelHelper(result_list):
     #Build the model
     c.buildModel()
     #Train the model
-    c.trainModel()
+    test_accuracy, test_loss = c.trainModel()
+    #In case the training is stopped early, add progress to avoid issues
+    classifier.progress = epochs.get()
     #Set the new button state
     setButtonState("training_finished")
     #Update labels
-    model_loaded_text.set("Model status: Training complete - Model loaded")
+    model_loaded_text.set(f"Model status: Training complete - Model loaded\nTest Accuracy: {test_accuracy*100:.2f}%, Test Loss: {test_loss:.4f}")
     hint_text.set("Model training complete")
     #Reset the saved model flag, since it's been trained again
     model_already_saved = False
@@ -619,8 +605,6 @@ def trainModelHelper(result_list):
     model_available = True
     #Reset the model already trained flag
     model_already_trained = False
-    #Reset the training progress counter
-    classifier.progress = 0
 
 #MARK: Button state
 def setButtonState(key:str):
@@ -705,7 +689,7 @@ root = Tk()
 root.title('Music Genre Classifier')
 #Set the minimum size so that all vital elements are still visible
 root.minsize(width=428, height=221)
-root.geometry("428x290")
+root.geometry("428x280")
 
 c = classifier.Classifier()
 file_path = StringVar(value="No files selected")
@@ -865,7 +849,7 @@ try:
     hint_text.set(f"Loaded model \"{model_path}\" from the default directory.")
     print(f"Loaded model \"{model_path}\" from the default directory.")
     #Update the model loaded text
-    model_loaded_text.set(f"Model status: Loaded model \"{model_path}\" from the default directory.")
+    model_loaded_text.set(f"Model status: Loaded model \"{model_path}\" from the default directory.\nTest Accuracy: {c.test_acc*100:.2f}%, Test Loss: {c.test_loss:.4f}")
     #Set the model available flag
     setButtonState("loaded_model")
     model_available = True
@@ -875,12 +859,3 @@ except:
     print("No model loaded")
 
 root.mainloop()
-
-#TODO: Remove this if not needed
-# rf = RandomForestClassifier(n_estimators=1000, max_depth=10, random_state=0)
-# cbc = cb.CatBoostClassifier(verbose=0, eval_metric='Accuracy', loss_function='MultiClass')
-# xgb = XGBClassifier(n_estimators=1000, learning_rate=0.05)
-
-# for clf in (rf, cbc, xgb):
-#     clf.fit(X_train, y_train)
-#     preds = clf.predict(X_test)

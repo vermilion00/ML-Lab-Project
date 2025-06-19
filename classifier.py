@@ -1,6 +1,5 @@
 import pandas as pd
-import tensorflow as tf
-from numpy import array as np_array
+import numpy as np
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
 from keras import *
@@ -15,7 +14,8 @@ LABEL_INDEX = 59
 progress = 0
 class Classifier:
     #MARK: Init
-    def __init__(self, learning_rate=0.00011, epochs=120, test_size=0.1, random_state=111, batch_size=20):
+    #High epoch amount is fine since early stopping is available
+    def __init__(self, learning_rate=0.00011, epochs=300, test_size=0.1, random_state=111, batch_size=20, patience=40):
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.test_size = test_size
@@ -30,6 +30,9 @@ class Classifier:
         # self.history = None
         self.label_encoder = LabelEncoder()
         self.scaler = MinMaxScaler()
+        self.patience = patience
+        self.test_acc = None
+        self.test_loss = None
     
     #MARK: Prepare Data
     def prepareData(self, data_list):
@@ -61,7 +64,10 @@ class Classifier:
         #TODO: Play around with layers
         model.add(Input(shape=(57,), batch_size=self.batch_size))
         model.add(Flatten())
+        model.add(Dense(units=512, activation='relu'))
+        model.add(Dropout(rate=0.3))
         model.add(Dense(units=256, activation='relu'))
+        model.add(Dropout(rate=0.3))
         model.add(BatchNormalization())
         model.add(Dense(units=128, activation='relu'))
         model.add(Dropout(rate=0.3))
@@ -79,6 +85,12 @@ class Classifier:
     
     #MARK: Train Model
     def trainModel(self):
+        #Define an early stopping callback to avoid wasting time training without progress
+        early_stopping = callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=self.patience,
+            restore_best_weights=True
+        )
         #Fit the model with the parameters set in the gui
         self.history = self.model.fit(
                     x=self.x_train,
@@ -86,13 +98,17 @@ class Classifier:
                     epochs=self.epochs,
                     batch_size=self.batch_size,
                     validation_data=(self.x_test, self.y_test),
-                    callbacks=[Callback()]
+                    callbacks=[Callback(), early_stopping]
+                    # callbacks=[Callback()]
                 )
         print("Fitted model")
         #Run a test simulation to get an accuracy reading
-        test_error, test_accuracy = self.model.evaluate(self.x_test, self.y_test, verbose=1)
-        print(f'Accuracy: {test_accuracy}')
-        print(f'Error: {test_error}')
+        #Assign the accuracy and loss values to be able to save them later
+        self.test_loss, self.test_acc = self.model.evaluate(self.x_test, self.y_test, verbose=1)
+        print(f'Test Accuracy: {self.test_acc*100:.2f}%')
+        print(f'Test Loss: {self.test_loss:.4f}')
+        #Return the accuracy and loss values to display them in the gui
+        return self.test_acc, self.test_loss
 
     #MARK: Predict Genre
     def predictGenre(self, data):
@@ -105,7 +121,7 @@ class Classifier:
                 #Remove the filename, length and label values
                 stripped_list = i[2:-1]
                 #Shape the features to (-1, 1)
-                shaped_list = np_array(stripped_list).reshape(1, -1)
+                shaped_list = np.array(stripped_list).reshape(1, -1)
                 #Scale the features using the MinMaxScaler
                 scaled_list = self.scaler.transform(shaped_list)
                 #Add the feature list to the list of songs to predict
@@ -149,6 +165,8 @@ class Classifier:
         obj_list = joblib.load(file_path)
         #Assign the read objects to the respective variables
         self.model, self.scaler, self.label_encoder = obj_list[0], obj_list[1], obj_list[2]
+        #Get the accuracy and loss from the saved list
+        self.test_acc, self.test_loss = obj_list[3], obj_list[4]
     
 #MARK: Callback
 class Callback(callbacks.Callback):
@@ -162,8 +180,8 @@ class Callback(callbacks.Callback):
         progress += 1
         # return super().on_epoch_end(epoch, logs)
 
-    #Reset the progress counter when the training is finished
+    #Incase the training is cancelled early, add to the progress so it doesn't break the program
     # def on_train_end(self, logs=None):
     #     global progress
-    #     progress = 0
-    #     # return super().on_train_end(logs)
+    #     progress = 
+        # return super().on_train_end(logs)

@@ -9,7 +9,6 @@ HINT_TEXT = {
     "load_file_button": "Click to select the audio file(s) you wish to import.",
     "load_csv_file_button": "Click to select a pre-extracted feature list. The file needs to follow the GTZAN .csv file layout.",
     "load_folder_button": "Click to select a folder containing the audio files you wish to import.",
-    "extract_button": "Click to begin extracting features from the selected files. Only available when audio files are selected.",
     "save_button": "Click to save the extracted features to a specified location.",
     "file_path_label": "Shows the model status, selected file paths, and predicted genres.",
     "progress_label": "Shows the progress on the currently running process.",
@@ -100,7 +99,6 @@ NO_DATA_MSG = "No data to save, extract some files first!"
 NO_FILES_MSG = "No files selected, select some files to extract the features from first!"
 READ_CSV_FAILED_MSG = "Failed to read CSV file, make sure it's in the correct format!"
 MALFORMED_CSV_MSG = "CSV is malformed, make sure the features are laid out correctly!"
-ALREADY_EXTRACTED_MSG = "The currently loaded audio files have already been extracted. Do you really want to extract their features again?"
 ALREADY_SAVED_MSG = "The currently loaded features have already been saved. Would you like to save them again?"
 SEARCH_SUBFOLDERS_MSG = "The selected folder contains no files to load, but subfolders have been detected. Would you like to recursively search all subfolders for audio files?"
 INVALID_INPUT_MSG = "One or more input fields contain invalid inputs! Take a look at the hint regarding each input field to see what field accepts what input, and use a dot as a decimal separator for floating point numbers."

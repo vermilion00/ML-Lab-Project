@@ -11,20 +11,14 @@
 # Add option to paste in link and classify audio
 #
 # Fixes to bug:
-# Add option to append to data with new selection, instead of overwriting it
-# Add button to show/hide model parameter options
-# Add a message showing which files have been extracted
 # Add button to compute and show confusion matrices
-# Extract files automatically after loading instead of clicking extra button?
 # Make progress bar progress more uniform - get rid of perceptr and harmony, tempo?
 # - Calls to their functions take too long
 # Program crashes if the first three progress += 1 calls happen too fast
 # Speed up startup somehow
-# Separate first x songs from each class out for testing (first 5 of each?)
+# Separate first x songs from each class out for testing (first 2 of each?)
 # Add message showing which ones belong there
-# Put the predict genre text in its own label to avoid appending file path issues
 # Allow appending to path from csv
-# When append is checked, only pass new paths to extract function instead of entire path
 
 from constants import *
 import classifier
@@ -83,23 +77,27 @@ def updateProgress(process, progress):
     num = int(progress/total_progress*100)
     #Process is still ongoing
     if num < 100:
-        progress_number.set(str(num) + '%')
+        progress_number.set(f'{num}%')
         progress_bar['value'] = num
     #Process is done
     else:
         #Do something when process is finished
         match process:
             case "extraction":
+                #Show a message
+                progress_text.set("Extraction Complete")
                 updateUI("extraction_finished")
                 #Reset the extraction progress counter
                 extraction_progress = 0
             case "training":
+                progress_text.set("Training Complete")
                 updateUI("training_finished")
                 #Reset the classifier progress counter
                 classifier.progress = 0
         #Limit the max progress value to 100
-        progress_number.set("100%")
         progress_bar["value"] = 100
+        #Hide the progress number
+        progress_number.set("")
         #Sleep for a short time keep the progress completed messages up
         time.sleep(1)
         #Hide progress label and bar
@@ -118,9 +116,6 @@ def thread1_handler():
     while True:
         if load_file_flag.is_set():
             load_file_flag.clear()
-            #Check if the file path text needs to be cleared
-            if file_path.get() == "No files selected":
-                file_path.set("")
             match file_type:
                 case "audio":
                     loadAudio()
@@ -136,10 +131,8 @@ def thread1_handler():
             trainModelHelper(result_list)
         elif predict_genre_flag.is_set():
             predict_genre_flag.clear()
-            # #Append the predicted genres to the file path
-            # file_path.set(file_path.get()+'\n\n'+c.predictGenre(result_list))
-            #Show the predicted genres in their label
             updateUI("prediction_started")
+            #Show the predicted genres in their label
             predicted_genres.set(c.predictGenre(result_list))
             updateUI("prediction_finished")
         elif save_model_flag.is_set():
@@ -154,8 +147,8 @@ def thread1_handler():
             time.sleep(0.1)
 
 #MARK: Thread 2
-#Not my favourite way of updating progress but I don't know a better way to show training
-#progress when that code is in a separate file
+#Not my favourite way of updating progress but I don't know a better way to show
+#training progress when that code is in a separate file
 def thread2_handler():
     global extraction_progress
     local_extraction_progress = 0
@@ -205,17 +198,18 @@ def loadAudio():
         #Remove the last newline character
         if len(file_path_str) > 0:
             file_path_str = file_path_str[:-1]
+        
+        #If the checkbox isn't marked or the filepath is empty, replace the text
+        if append_path.get() == False or file_path.get() == "No files selected":
+            new_paths = file_paths
+            paths = file_paths
+            file_path.set(file_path_str)
         #If the checkbox is marked, append to the path
-        if append_path.get() == True:
+        else:
             new_paths = file_paths
             #Save the tuple globally to make iterating easier
             paths += file_paths
             file_path.set(file_path.get() + '\n' + file_path_str)
-        #If not, replace the current path
-        else:
-            new_paths = file_paths
-            paths = file_paths
-            file_path.set(file_path_str)
         #Since new data is available, reset extracted flag
         already_extracted = False
         #Extract files after loading them
@@ -274,17 +268,17 @@ def loadFolder():
             #Remove the last newline character
             if len(file_path_str) > 0:
                 file_path_str = file_path_str[:-1]
-            #If the checkbox is marked, append to the path
-            if append_path.get() == True:
-                new_paths = file_paths
-                #Save the tuple globally to make iterating easier
-                paths += file_paths
-                file_path.set(file_path.get() + '\n' + file_path_str)
-            #If not, replace the current path
-            else:
+            #If the checkbox isn't marked or the filepath is empty, replace the text
+            if append_path.get() == False or file_path.get() == "No files selected":
                 new_paths = file_paths
                 paths = file_paths
                 file_path.set(file_path_str)
+            #If the checkbox is marked, append to the path
+            else:
+                new_paths = file_paths
+                #Save the tuple globally to make iterating easier
+                paths += file_paths
+            file_path.set(file_path.get() + '\n' + file_path_str)
             #Since new data is available, reset extracted flag
             already_extracted = False
             #Extract files after loading them
@@ -333,17 +327,17 @@ def loadFolder():
                             #Remove the last newline character
                             if len(file_path_str) > 0:
                                 file_path_str = file_path_str[:-1]
+                            #If the checkbox isn't marked or the filepath is empty, replace the text
+                            if append_path.get() == False or file_path.get() == "No files selected":
+                                new_paths = file_paths
+                                paths = file_paths
+                                file_path.set(file_path_str)
                             #If the checkbox is marked, append to the path
-                            if append_path.get() == True:
+                            else:
                                 new_paths = file_paths
                                 #Save the tuple globally to make iterating easier
                                 paths += file_paths
                                 file_path.set(file_path.get() + '\n' + file_path_str)
-                            #If not, replace the current path
-                            else:
-                                new_paths = file_paths
-                                paths = file_paths
-                                file_path.set(file_path_str)
                             #Since new data is available, reset extracted flag
                             already_extracted = False
                             #Extract files after loading them
@@ -517,10 +511,6 @@ def startExtraction():
     global already_saved
     global model_already_trained
     global extraction_progress
-    #If the files have already been extracted, ask if they should be extracted again
-    if already_extracted and not mb.askyesno(title="Extract again?", message=ALREADY_EXTRACTED_MSG):
-        #If the answer is no, abort the function call
-        return
     #Check if audio files are selected
     #TODO: Check if paths can be a tuple here - prob not relevant since button is locked anyway
     if new_paths != []:
@@ -534,7 +524,7 @@ def startExtraction():
                 #y is a time-series-array, sr is the sample rate
                 y, sr = librosa.load(i, sr=None)
                 extraction_progress += 1
-                #Put all functions in an array for easy accessing
+                #Put (almost) all functions in a list for easy processing
                 feature_function_list = [
                     feature.chroma_stft(y=y, sr=sr),
                     feature.rms(y=y),
@@ -580,8 +570,14 @@ def startExtraction():
 
             #A file in the list could not be opened
             except Exception as e:
-                #Add the progress, since the updateProgress function expects 7 more calls to happen
-                extraction_progress += EXTRACTION_STEPS
+                #If the first file can't be opened, add progress slowly so progress bar can load
+                if extraction_progress == 0:
+                    extraction_progress = 1
+                    time.sleep(0.1)
+                    extraction_progress = EXTRACTION_STEPS
+                else:
+                    #Add the progress, since the updateProgress function expects 7 more calls to happen
+                    extraction_progress += EXTRACTION_STEPS
                 print(f"A file at {i} could not be opened.")
                 mb.showerror(title="Invalid file", message=f"The file \"{i[i.rindex('/')+1:]}\" at path \"{i[:i.rindex('/')+1]}\" could not be opened. The extraction will continue without it.\n{e}")
     #No files are selected
@@ -811,13 +807,6 @@ current_dir = path.dirname(path.abspath(argv[0]))
 button_row_1_frame = ttk.Frame(root, padding="2 0 2 0")
 button_row_1_frame.pack(anchor=N, side=TOP)
 #Create a checkbox
-# checkbox_helper_frame = ttk.Frame(button_row_1_frame)
-# checkbox_helper_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["checkbox"]))
-# checkbox_helper_frame.pack(side=LEFT)
-# checkbox_label = ttk.Label(checkbox_helper_frame, text="Append").pack(side=LEFT)
-# checkbox_label.pack(side=LEFT)
-# checkbox = ttk.Checkbutton(checkbox_helper_frame, variable=append_path).pack(side=LEFT)
-# checkbox.pack(side=LEFT)
 checkbox = ttk.Checkbutton(button_row_1_frame, variable=append_path, text="Append")
 checkbox.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["checkbox"]))
 checkbox.pack(side=LEFT)
@@ -831,10 +820,6 @@ load_file_button.pack(side=LEFT, padx=1, pady=2)
 load_folder_button = ttk.Button(button_row_1_frame, text="Load Folder", command=lambda:loadFileHelper("folder"), padding="2 2 2 2")
 load_folder_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_folder_button"]))
 load_folder_button.pack(side=LEFT, padx=1, pady=2)
-# Don't need the extract button anymore
-# extract_button = ttk.Button(button_row_1_frame, text="Extract features", command=extract_flag.set, padding="2 2 2 2", state=DISABLED)
-# extract_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["extract_button"]))
-# extract_button.pack(side=LEFT, padx=1, pady=2)
 predict_genre_button = ttk.Button(button_row_1_frame, text="Predict Genre", command=predict_genre_flag.set, state=DISABLED)
 predict_genre_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["predict_genre_button"]))
 predict_genre_button.pack(side=LEFT, padx=1, pady=2)
@@ -844,7 +829,6 @@ show_advanced_button.pack(side=LEFT, padx=1, pady=2)
 #Hide button remains unpacked for now
 hide_advanced_button = ttk.Button(button_row_1_frame, width=13, text="Hide Options", command=lambda: updateUI("hide_options"))
 hide_advanced_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["hide_options_button"]))
-# hide_advanced_button.pack(side=LEFT)
 
 #MARK: Model buttons
 model_frame = ttk.Frame(root, padding="0 2 0 2")
@@ -919,13 +903,13 @@ file_text_label = ttk.Label(file_path_frame, text="Selected file path(s):")
 file_text_label.pack(anchor=W, padx=3, pady=(2,0))
 #This label shows the file paths
 file_path_label = ttk.Label(file_path_frame, textvariable=file_path)
-file_path_label.pack(padx=3, pady=1, expand=True, anchor=W)
+file_path_label.pack(padx=3, expand=True, anchor=W)
 #This frame shows the predicted genres
 genre_frame = ttk.Frame(file_frame)
 genre_text_label = ttk.Label(genre_frame, text="Predicted Genres:")
-genre_text_label.pack(padx=3, anchor=W)
+genre_text_label.pack(padx=3, pady=(2,0), anchor=W)
 genre_label = ttk.Label(genre_frame, textvariable=predicted_genres)
-genre_label.pack(padx=3, pady=1, expand=True, anchor=W)
+genre_label.pack(padx=3, expand=True, anchor=W)
 #Bind scrolling events to the respective windows
 #If scrolling should only be possible inside the frame, it needs to be bound to each label inside
 # file_path_frame_helper.bind_scroll_wheel(file_path_frame_helper)

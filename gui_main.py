@@ -8,7 +8,6 @@
 # Fix being able to scroll up past first path for some reason
 # Add option to show waveplots/spectrograms
 # Add button to save new default parameters
-# Add option to paste in link and classify audio
 #
 # Fixes to bug:
 # Add button to compute and show confusion matrices
@@ -19,6 +18,8 @@
 # Separate first x songs from each class out for testing (first 2 of each?)
 # Add message showing which ones belong there
 # Allow appending to path from csv
+# Show download progress
+# Find out why predicted genre text displays over the scroll bar
 
 from constants import *
 import classifier
@@ -35,11 +36,12 @@ import librosa
 from librosa import feature, effects, beat
 from glob import glob
 import joblib
-from os import path
+from os import path, remove
 from sys import argv
 from urllib.request import urlopen
 from io import BytesIO
 from pydub import AudioSegment
+from yt_dlp import YoutubeDL
 
 #MARK: Threading events
 extract_flag = threading.Event()
@@ -49,6 +51,7 @@ train_model_flag = threading.Event()
 predict_genre_flag = threading.Event()
 save_model_flag = threading.Event()
 load_model_flag = threading.Event()
+load_url_flag = threading.Event()
 
 #MARK: Progress func
 #Handles showing and hiding the progress bar as well as updating it
@@ -126,6 +129,9 @@ def thread1_handler():
                     loadCSV()
                 case "folder":
                     loadFolder()
+        elif load_url_flag.is_set():
+            load_url_flag.clear()
+            loadURL()
         elif save_file_flag.is_set():
             save_file_flag.clear()
             saveCSV()
@@ -204,12 +210,12 @@ def loadAudio():
         
         #If the checkbox isn't marked or the filepath is empty, replace the text
         if append_path.get() == False or file_path.get() == "No files selected":
-            new_paths = file_paths
+            new_paths = list(file_paths)
             paths = file_paths
             file_path.set(file_path_str)
         #If the checkbox is marked, append to the path
         else:
-            new_paths = file_paths
+            new_paths = list(file_paths)
             #Save the tuple globally to make iterating easier
             paths += file_paths
             file_path.set(file_path.get() + '\n' + file_path_str)
@@ -249,7 +255,6 @@ def loadFolder():
     #Check if the file path isn't empty
     if file_path_str != "":
         file_path_str += '/'
-        # file_path.set(file_path_str)
         file_paths = []
         #Look for all allowed filetypes in the folder and add them to path list
         #TODO: glob files in single lookup instead of looping over each ending
@@ -273,12 +278,12 @@ def loadFolder():
                 file_path_str = file_path_str[:-1]
             #If the checkbox isn't marked or the filepath is empty, replace the text
             if append_path.get() == False or file_path.get() == "No files selected":
-                new_paths = file_paths
+                new_paths = list(file_paths)
                 paths = file_paths
                 file_path.set(file_path_str)
             #If the checkbox is marked, append to the path
             else:
-                new_paths = file_paths
+                new_paths = list(file_paths)
                 #Save the tuple globally to make iterating easier
                 paths += file_paths
             file_path.set(file_path.get() + '\n' + file_path_str)
@@ -332,12 +337,12 @@ def loadFolder():
                                 file_path_str = file_path_str[:-1]
                             #If the checkbox isn't marked or the filepath is empty, replace the text
                             if append_path.get() == False or file_path.get() == "No files selected":
-                                new_paths = file_paths
+                                new_paths = list(file_paths)
                                 paths = file_paths
                                 file_path.set(file_path_str)
                             #If the checkbox is marked, append to the path
                             else:
-                                new_paths = file_paths
+                                new_paths = list(file_paths)
                                 #Save the tuple globally to make iterating easier
                                 paths += file_paths
                                 file_path.set(file_path.get() + '\n' + file_path_str)
@@ -523,24 +528,25 @@ def startExtraction(source="file"):
         #Iterate over every selected path and extract the audio features
         for i in new_paths:
             try:
-                if source == "file":
-                    #Load the audio file using librosa
-                    #y is a time-series-array, sr is the sample rate
-                    y, sr = librosa.load(i, sr=None)
+                #Download the url target first if the source isn't a file
+                if source != "file":
+                    y, sr = loadFileFromURL(i)
                 else:
-                    #Check if source is not empty
-                    if source != "":
-                        #Load audio from url
-                        #Resample to wav
-                        # wav = BytesIO
-                        # with urlopen(url.get()) as request:
-                        #     request.seek = lambda *args: None
-                        #     AudioSegment.from_file(request).export(wav, "wav")
-                        # #TODO: Is this necessary
-                        # wav.seek(0)
-                        # y, sr = librosa.load(wav, sr=None)
-                        # Load wav directly
-                        y, sr = librosa.load(BytesIO(urlopen(url.get()).read()))
+                    #Try the easy implementation
+                    try:
+                        #Load audio from a file
+                        y, sr = librosa.load(i)
+                    except:
+                        #If librosa can't open the file, try resampling it to wav first (needs ffmpeg)
+                        try:
+                            #Resample to wav
+                            wav = BytesIO
+                            AudioSegment.from_file(i).export(wav, 'wav')
+                            y, sr = librosa.load(wav, sr=None)
+                        except Exception as e:
+                            print(f"Failed to load file.\n{e}")
+                            mb.showerror(title="Failed to load file.", message=f"The file {i} failed to load. Make sure the format is one of [.wav, .mp3, .flac, .ogg]. For extended file support, e.g. YouTube, make sure that ffmpeg is installed correctly.\n{e}")
+
                 extraction_progress += 1
                 #Put (almost) all functions in a list for easy processing
                 feature_function_list = [
@@ -560,7 +566,12 @@ def startExtraction(source="file"):
                 ]
                 extraction_progress += 1
                 #Make a feature list, extract the filename from the path, and get length
-                feature_list = [i[i.rindex('/')+1:], librosa.get_duration(y=y, sr=sr)]
+                #If the name doesn't follow naming procedure, use default name
+                try:
+                    name = i[i.rindex('/')+1:] 
+                except:
+                    name = "missing_name"
+                feature_list = [name, librosa.get_duration(y=y, sr=sr)]
                 #Delete the progress helper function indexes
                 del feature_function_list[6]
                 #This one is at index 8 since hpss unpacks into two indexes
@@ -575,7 +586,12 @@ def startExtraction(source="file"):
                 feature_list.insert(18, *beat.beat_track(y=y, sr=sr)[0])
                 extraction_progress += 1
                 #Get the label from the filename
-                feature_list.append(feature_list[0][:feature_list[0].index('.')])
+                #If the label doesn't follow naming procedure, use default label
+                try:
+                    label = feature_list[0][:feature_list[0].index('.')]
+                except:
+                    label = "missing_label"
+                feature_list.append(label)
                 #Append feature list of current track to complete result list, incase multiple tracks are selected
                 result_list.append(feature_list)
                 extraction_progress += 1
@@ -602,6 +618,55 @@ def startExtraction(source="file"):
     else:
         mb.showerror(title="No files selected", message=NO_FILES_MSG)
         print(NO_FILES_MSG)
+
+#MARK: Load File URL
+def loadFileFromURL(url):
+    #Load audio from url
+    #TODO: Show download progress bar
+    hint_text.set("Downloading file from URL")
+    #If url is a youtube link, use yt-dlp
+    if "youtu" in url:
+        yt_options = {
+            "format": "bestaudio",
+            "outtmpl": "temp.wav"
+        }
+        try:
+            #TODO: Try saving to BytesIO directly - Need to find out how to reencode the file from bytesIO
+            with YoutubeDL(yt_options) as audio:
+                audio.download([url])
+                hint_text.set("Download complete, loading File")
+            y, sr = librosa.load('temp.wav', sr=None)
+            #Remove the temp file after loading it
+            remove('temp.wav')
+        except Exception as e:
+            print(f"Failed to load YouTube URL.\n{e}")
+            mb.showerror("Failed to load YouTube URL", message=f"Failed to load YouTube URL. This function needs to have ffmpeg installed and added to path in order to run.\n{e}")
+    #Try using this easy implementation
+    else:
+        try:
+            file = BytesIO(urlopen(url.get()).read())
+            hint_text.set("Download complete, loading File")
+        except Exception as e:
+            print(f"URL failed to load.\n{e}")
+            mb.showerror(title="Failed to load URL", message=f"The URL failed to load.\n{e}")
+        #Load the features from a bytes object
+        try:
+            y, sr = librosa.load(file)
+        except:
+            #If librosa can't open the file, try resampling it to wav first (needs ffmpeg)
+            try:
+                #Resample to wav
+                wav = BytesIO
+                with urlopen(url.get()) as request:
+                    request.seek = lambda *args: None
+                    AudioSegment.from_file(request).export(wav, "wav")
+                wav.seek(0)
+                hint_text.set("Download complete, loading File")
+                y, sr = librosa.load(wav, sr=None)
+            except Exception as e:
+                print(f"Failed to load file.\n{e}")
+                mb.showerror(title="Failed to load file.", message=f"The file {url} failed to load. Make sure the format is one of [.wav, .mp3, .flac, .ogg]. For extended file support, e.g. YouTube, make sure that ffmpeg is installed correctly.\n{e}")
+    return y, sr
 
 #MARK: Train Model
 def trainModelHelper(result_list):
@@ -753,7 +818,7 @@ def updateUI(key:str):
             #Show the hide advanced button
             hide_advanced_button.pack(after=predict_genre_button, side=LEFT, padx=1, pady=2)
             #Show the advanced options
-            model_frame.pack(anchor=N, before=file_frame)
+            model_frame.pack(anchor=N)
         case "hide_options":
             #Hide the advanced options    
             model_frame.pack_forget()
@@ -777,9 +842,25 @@ def setWraplength(event, label=None):
 
 #MARK: Load URL
 def loadURL():
+    #TODO: Bring this in line with other functions
     global new_paths
-    new_paths.append(url.get())
-    startExtraction(new_paths)
+    global paths
+    #Check if the entry field contains text
+    if url.get() != "":
+        
+        #If the checkbox isn't marked or the filepath is empty, replace the text
+        if append_path.get() == False or file_path.get() == "No files selected":
+            # paths = file_paths
+            file_path.set(url.get())
+        #If the checkbox is marked, append to the path
+        else:
+            #Save the tuple globally to make iterating easier
+            # paths += file_paths
+            file_path.set(file_path.get() + '\n' + url.get())
+        new_paths = []
+        new_paths.append(url.get())
+        startExtraction(new_paths)
+    
 
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still
@@ -793,8 +874,8 @@ thread2.start()
 root = Tk()
 root.title('Music Genre Classifier')
 #Set the minimum size so that all vital elements are still visible
-root.minsize(width=428, height=221)
-root.geometry("428x280")
+root.minsize(width=425, height=221)
+root.geometry("425x280")
 
 c = classifier.Classifier()
 file_path = StringVar(value="No files selected")
@@ -829,7 +910,7 @@ random_state = IntVar(value=c.random_state)
 current_dir = path.dirname(path.abspath(argv[0]))
 
 #MARK: Buttons
-button_helper_frame = ttk.Frame(root)
+button_helper_frame = ttk.Frame(root, padding="0 2 0 2")
 button_helper_frame.pack(anchor=N)
 #Make a new frame to group the related buttons together
 button_row_1_frame = ttk.Frame(button_helper_frame, padding="2 0 2 0")
@@ -864,7 +945,7 @@ url_frame.pack(fill=X)
 url_entry = ttk.Entry(url_frame, textvariable=url, justify=CENTER)
 url_entry.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["url_entry"]))
 url_entry.pack(side=LEFT, fill=X, expand=True)
-load_url_button = ttk.Button(url_frame, text="Load URL", command=loadURL)
+load_url_button = ttk.Button(url_frame, text="Load URL", command=load_url_flag.set)
 load_url_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_url_button"]))
 load_url_button.pack(side=LEFT)
 
@@ -889,34 +970,34 @@ save_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["save_button"]))
 save_button.pack(side=LEFT)
 
 #MARK: Model Entries
-model_entry_frame = ttk.Frame(model_frame, padding="2 2 2 2")
+model_entry_frame = ttk.Frame(model_frame)
 model_entry_frame.pack()
 #Learning rate elements
-learning_rate_frame = ttk.Frame(model_entry_frame, padding="2 2 2 2")
+learning_rate_frame = ttk.Frame(model_entry_frame)
 learning_rate_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["learning_rate"]))
 learning_rate_frame.pack(side=LEFT)
 learning_rate_label = ttk.Label(learning_rate_frame, text="Learning Rate").pack()
 learning_rate_entry = ttk.Entry(learning_rate_frame, textvariable=learning_rate, width=12, justify=CENTER).pack()
 #Epochs elements
-epochs_frame = ttk.Frame(model_entry_frame, padding="2 2 2 2")
+epochs_frame = ttk.Frame(model_entry_frame)
 epochs_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["epochs"]))
 epochs_frame.pack(side=LEFT)
 epochs_label = ttk.Label(epochs_frame, text="Epochs").pack()
 epochs_entry = ttk.Entry(epochs_frame, textvariable=epochs, width=12, justify=CENTER).pack()
 #Test size elements
-test_size_frame = ttk.Frame(model_entry_frame, padding="2 2 2 2")
+test_size_frame = ttk.Frame(model_entry_frame)
 test_size_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["test_size"]))
 test_size_frame.pack(side=LEFT)
 test_size_label = ttk.Label(test_size_frame, text="Test Size").pack()
 test_size_entry = ttk.Entry(test_size_frame, textvariable=test_size, width=12, justify=CENTER).pack()
 #Batch size elements
-batch_size_frame = ttk.Frame(model_entry_frame, padding="2 2 2 2")
+batch_size_frame = ttk.Frame(model_entry_frame)
 batch_size_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["batch_size"]))
 batch_size_frame.pack(side=LEFT)
 batch_size_label = ttk.Label(batch_size_frame, text="Batch Size").pack()
 batch_size_entry = ttk.Entry(batch_size_frame, textvariable=batch_size, width=12, justify=CENTER).pack()
 #Random state elements
-random_state_frame = ttk.Frame(model_entry_frame, padding="2 2 2 2")
+random_state_frame = ttk.Frame(model_entry_frame)
 random_state_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["random_state"]))
 random_state_frame.pack(side=LEFT)
 random_state_label = ttk.Label(random_state_frame, text="Random State").pack()
@@ -937,7 +1018,7 @@ model_loaded_label = ttk.Label(file_path_frame, textvariable=model_loaded_text, 
 file_frame.bind('<Configure>', lambda a: setWraplength(a, label="model_loaded_label"))
 model_loaded_label.pack(padx=3, fill=X, expand=True)
 #This label shows the text above the paths
-file_text_label = ttk.Label(file_path_frame, text="Selected file path(s):")
+file_text_label = ttk.Label(file_path_frame, text="Selected files:")
 file_text_label.pack(anchor=W, padx=3, pady=(2,0))
 #This label shows the file paths
 file_path_label = ttk.Label(file_path_frame, textvariable=file_path)

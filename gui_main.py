@@ -24,6 +24,7 @@
 # Add message showing which ones belong there
 # Put the predict genre text in its own label to avoid appending file path issues
 # Allow appending to path from csv
+# When append is checked, only pass new paths to extract function instead of entire path
 
 from constants import *
 import classifier
@@ -56,7 +57,7 @@ load_model_flag = threading.Event()
 #Handles showing and hiding the progress bar as well as updating it
 def updateProgress(process, progress):
     global total_progress
-    global paths
+    global new_paths
     global model_available
     global extraction_progress
     #Check if this is the first call for this progress
@@ -65,15 +66,15 @@ def updateProgress(process, progress):
         match process:
             case "extraction":
                 #Set total progress to the amount of steps per path * amount of paths
-                total_progress = EXTRACTION_STEPS * len(paths)
+                total_progress = EXTRACTION_STEPS * len(new_paths)
                 progress_text.set("Running extraction: ")
                 #Update button states
-                setButtonState("extraction_started")
+                updateUI("extraction_started")
             case "training":
                 #Set total progress to the amount of steps per path * amount of paths
                 total_progress = epochs.get()
                 progress_text.set("Training model: ")
-                setButtonState("training_started")
+                updateUI("training_started")
         #Replace the hint label with the progress label and bar
         hint_label.pack_forget()
         progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2), fill=X)
@@ -86,30 +87,29 @@ def updateProgress(process, progress):
         progress_bar['value'] = num
     #Process is done
     else:
-        #TODO: Remove this if the progress bar should not stay up a bit after completion
+        #Do something when process is finished
+        match process:
+            case "extraction":
+                updateUI("extraction_finished")
+                #Reset the extraction progress counter
+                extraction_progress = 0
+            case "training":
+                updateUI("training_finished")
+                #Reset the classifier progress counter
+                classifier.progress = 0
         #Limit the max progress value to 100
-        # progress_number.set("100%")
-        # progress_bar["value"] = 100
+        progress_number.set("100%")
+        progress_bar["value"] = 100
         #Sleep for a short time keep the progress completed messages up
-        # time.sleep(0.5)
+        time.sleep(1)
         #Hide progress label and bar
         progress_frame.pack_forget()
         #Set the hint label to say that the process is done
         hint_text.set(HINT_TEXT[process])
         #Show the hint label again
         hint_label.pack(padx=2, pady=(0,2), fill=X)
-        #Do something when process is finished
-        match process:
-            case "extraction":
-                setButtonState("extraction_finished")
-                #Reset the extraction progress counter
-                extraction_progress = 0
-            case "training":
-                setButtonState("training_finished")
-                #Reset the classifier progress counter
-                classifier.progress = 0
 
-#MARK: Thread 1 handler
+#MARK: Thread 1
 #Handles several functions running on one thread
 #Since all these functions can't run concurrently, they can share a thread
 def thread1_handler():
@@ -136,9 +136,12 @@ def thread1_handler():
             trainModelHelper(result_list)
         elif predict_genre_flag.is_set():
             predict_genre_flag.clear()
-            #Append the predicted genres to the file path
-            file_path.set(file_path.get()+'\n\n'+c.predictGenre(result_list))
-            hint_text.set(HINT_TEXT["prediction"])
+            # #Append the predicted genres to the file path
+            # file_path.set(file_path.get()+'\n\n'+c.predictGenre(result_list))
+            #Show the predicted genres in their label
+            updateUI("prediction_started")
+            predicted_genres.set(c.predictGenre(result_list))
+            updateUI("prediction_finished")
         elif save_model_flag.is_set():
             save_model_flag.clear()
             saveModel()
@@ -150,7 +153,7 @@ def thread1_handler():
             #If thread is not needed, sleep for 100ms before polling again
             time.sleep(0.1)
 
-#MARK: Thread 2 Handler
+#MARK: Thread 2
 #Not my favourite way of updating progress but I don't know a better way to show training
 #progress when that code is in a separate file
 def thread2_handler():
@@ -179,6 +182,7 @@ def loadFileHelper(type):
 #MARK: Load audio
 def loadAudio():
     global paths
+    global new_paths
     global already_extracted
     #Which file types should be selectable?
     filetypes = (
@@ -203,19 +207,20 @@ def loadAudio():
             file_path_str = file_path_str[:-1]
         #If the checkbox is marked, append to the path
         if append_path.get() == True:
+            new_paths = file_paths
             #Save the tuple globally to make iterating easier
             paths += file_paths
             file_path.set(file_path.get() + '\n' + file_path_str)
         #If not, replace the current path
         else:
+            new_paths = file_paths
             paths = file_paths
             file_path.set(file_path_str)
         #Since new data is available, reset extracted flag
         already_extracted = False
         #Extract files after loading them
-        # extract_flag.set()
         startExtraction()
-        setButtonState("loaded_audio")
+        updateUI("loaded_audio")
 
 #MARK: Load CSV
 def loadCSV():
@@ -238,6 +243,7 @@ def loadCSV():
 #MARK: Load Folder
 def loadFolder():
     global paths
+    global new_paths
     global already_extracted
     #Unfortunately tkinter can't open a window to select either a file or a folder
     file_path_str = fd.askdirectory(
@@ -270,18 +276,20 @@ def loadFolder():
                 file_path_str = file_path_str[:-1]
             #If the checkbox is marked, append to the path
             if append_path.get() == True:
+                new_paths = file_paths
                 #Save the tuple globally to make iterating easier
                 paths += file_paths
                 file_path.set(file_path.get() + '\n' + file_path_str)
             #If not, replace the current path
             else:
+                new_paths = file_paths
                 paths = file_paths
                 file_path.set(file_path_str)
             #Since new data is available, reset extracted flag
             already_extracted = False
             #Extract files after loading them
             startExtraction()
-            setButtonState("loaded_audio")
+            updateUI("loaded_audio")
     
         #If file path is empty, look for csv file instead
         else:
@@ -327,11 +335,13 @@ def loadFolder():
                                 file_path_str = file_path_str[:-1]
                             #If the checkbox is marked, append to the path
                             if append_path.get() == True:
+                                new_paths = file_paths
                                 #Save the tuple globally to make iterating easier
                                 paths += file_paths
                                 file_path.set(file_path.get() + '\n' + file_path_str)
                             #If not, replace the current path
                             else:
+                                new_paths = file_paths
                                 paths = file_paths
                                 file_path.set(file_path_str)
                             #Since new data is available, reset extracted flag
@@ -339,7 +349,7 @@ def loadFolder():
                             #Extract files after loading them
                             startExtraction()
                             #Set the button state accordingly
-                            setButtonState("loaded_audio")
+                            updateUI("loaded_audio")
                         #No files found in subfolders
                         else:
                             mb.showinfo(title="No files found", message="No files have been found in any subfolders.")
@@ -383,7 +393,7 @@ def readCSV(csv_path):
             already_saved = False
             model_already_trained = False
             #Update the button state accordingly
-            setButtonState("opened_csv")
+            updateUI("opened_csv")
     except Exception as e:
         #Error when opening the csv file
         print(READ_CSV_FAILED_MSG)
@@ -485,7 +495,7 @@ def loadModelHelper():
             model_already_saved = False
             #Set the model_available flag
             model_available = True
-            setButtonState("loaded_model")
+            updateUI("loaded_model")
             model_loaded_text.set(f"Model status:\nLoaded model \"{file_path_str}\"")
             hint_text.set(f"Loaded model \"{file_path_str}\"")
         except Exception as e:
@@ -501,7 +511,7 @@ def incrementProgressHelper():
 #MARK: Extract
 #Extracts the features from the loaded audio files
 def startExtraction():
-    global paths
+    global new_paths
     global result_list
     global already_extracted
     global already_saved
@@ -513,10 +523,12 @@ def startExtraction():
         return
     #Check if audio files are selected
     #TODO: Check if paths can be a tuple here - prob not relevant since button is locked anyway
-    if paths != []:
-        result_list = []
+    if new_paths != []:
+        #Only clear already extracted data if append path isn't checkeds
+        if append_path.get() == False:
+            result_list = []
         #Iterate over every selected path and extract the audio features
-        for i in paths:
+        for i in new_paths:
             try:
                 #Load the audio file using librosa
                 #y is a time-series-array, sr is the sample rate
@@ -621,7 +633,7 @@ def trainModelHelper(result_list):
     #In case the training is stopped early, add progress to avoid issues
     classifier.progress = epochs.get()
     #Set the new button state
-    setButtonState("training_finished")
+    updateUI("training_finished")
     #Update labels
     model_loaded_text.set(f"Model status:\nTraining complete - Model loaded\nTest Accuracy: {test_accuracy*100:.2f}%, Test Loss: {test_loss:.4f}")
     hint_text.set("Model training complete")
@@ -632,8 +644,8 @@ def trainModelHelper(result_list):
     #Reset the model already trained flag
     model_already_trained = False
 
-#MARK: Button state
-def setButtonState(key:str):
+#MARK: Update UI
+def updateUI(key:str):
     global model_available
     global already_extracted
     match key:
@@ -663,6 +675,8 @@ def setButtonState(key:str):
             #Only unlock the prediction button if a model is loaded
             if model_available:
                 predict_genre_button.config(state=NORMAL)
+            #Hide the predicted genre frame, since new paths have been loaded
+            genre_frame.pack_forget()
         case "training_started":
             #Lock the model buttons
             load_model_button.config(state=DISABLED)
@@ -675,6 +689,23 @@ def setButtonState(key:str):
             train_model_button.config(state=NORMAL)
             predict_genre_button.config(state=NORMAL)
             save_model_button.config(state=NORMAL)
+        case "prediction_started":
+            #Lock the model buttons
+            load_model_button.config(state=DISABLED)
+            train_model_button.config(state=DISABLED)
+            predict_genre_button.config(state=DISABLED)
+            save_model_button.config(state=DISABLED)
+        case "prediction_finished":
+            #Unlock the model buttons after the process
+            load_model_button.config(state=NORMAL)
+            train_model_button.config(state=NORMAL)
+            predict_genre_button.config(state=NORMAL)
+            save_model_button.config(state=NORMAL)
+            #Show the genre frame
+            genre_frame.pack(after=file_path_label, anchor=W)
+            #Update the hint text
+            hint_text.set(HINT_TEXT["prediction"])
+        #TODO: Check if this case exists
         case "loaded_audio":
             #Enable the extract button, since audio paths are now available
             # extract_button.config(state=NORMAL)
@@ -683,6 +714,8 @@ def setButtonState(key:str):
             #Lock the model buttons, to avoid confusion, since the new audio files haven't been extracted
             train_model_button.config(state=DISABLED)
             predict_genre_button.config(state=DISABLED)
+            #Hide the predicted genre frame, since new paths have been loaded
+            genre_frame.pack_forget()
         case "opened_csv":
             #Enable the save button, since features are now available to save
             save_button.config(state=NORMAL)
@@ -693,11 +726,27 @@ def setButtonState(key:str):
             #Only unlock the predict genre button if a model is available
             if model_available:
                 predict_genre_button.config(state=NORMAL)
+            #Hide the predicted genre frame, since new paths have been loaded
+            genre_frame.pack_forget()
         case "loaded_model":
             save_model_button.config(state=NORMAL)
             #If the selected files have been extracted, unlock predict genre button
             if already_extracted:
                 predict_genre_button.config(state=NORMAL)
+        case "show_options":
+            #Hide the show advanced button
+            show_advanced_button.pack_forget()
+            #Show the hide advanced button
+            hide_advanced_button.pack(after=predict_genre_button, side=LEFT, padx=1, pady=2)
+            #Show the advanced options
+            model_frame.pack(anchor=N, before=file_frame)
+        case "hide_options":
+            #Hide the advanced options    
+            model_frame.pack_forget()
+            #Hide the hide advanced button
+            hide_advanced_button.pack_forget()
+            #Show the show advanced button
+            show_advanced_button.pack(after=predict_genre_button, side=LEFT, padx=1, pady=2)
 
 #MARK: Wraplength
 #Set the wraplength of the label based on the window size
@@ -711,18 +760,6 @@ def setWraplength(event, label=None):
         case _:
             #Subtract 6 from the width for padding
             event.widget.configure(wraplength=event.width-6)
-
-#MARK: Show options
-#Show/Hide the model settings/buttons
-def changeAdvanced(key):
-    if key == "show":
-        #Hide the show advanced button
-        show_advanced_button.pack_forget()
-        #Show the advanced options
-        model_frame.pack(anchor=N, before=file_frame)
-    else:
-        model_frame.pack_forget()
-        show_advanced_button.pack(anchor=NW)
 
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still
@@ -741,6 +778,7 @@ root.geometry("428x280")
 
 c = classifier.Classifier()
 file_path = StringVar(value="No files selected")
+file_paths = []
 paths = []
 result_list = []
 file_type = ""
@@ -749,7 +787,8 @@ model_loaded_text = StringVar(value="Model status: No model loaded")
 hint_text = StringVar(value=HINT_TEXT["program_start"])
 progress_text = StringVar()
 progress_number = StringVar()
-append_path = BooleanVar()
+predicted_genres = StringVar()
+append_path = BooleanVar(value=True)
 #Progress bar progress
 extraction_progress = 0
 total_progress = 0
@@ -772,13 +811,16 @@ current_dir = path.dirname(path.abspath(argv[0]))
 button_row_1_frame = ttk.Frame(root, padding="2 0 2 0")
 button_row_1_frame.pack(anchor=N, side=TOP)
 #Create a checkbox
-checkbox_helper_frame = ttk.Frame(button_row_1_frame)
-checkbox_helper_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["checkbox"]))
-checkbox_helper_frame.pack(side=LEFT)
-checkbox_label = ttk.Label(checkbox_helper_frame, text="Append").pack(side=LEFT)
+# checkbox_helper_frame = ttk.Frame(button_row_1_frame)
+# checkbox_helper_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["checkbox"]))
+# checkbox_helper_frame.pack(side=LEFT)
+# checkbox_label = ttk.Label(checkbox_helper_frame, text="Append").pack(side=LEFT)
 # checkbox_label.pack(side=LEFT)
-checkbox = ttk.Checkbutton(checkbox_helper_frame, variable=append_path).pack(side=LEFT)
+# checkbox = ttk.Checkbutton(checkbox_helper_frame, variable=append_path).pack(side=LEFT)
 # checkbox.pack(side=LEFT)
+checkbox = ttk.Checkbutton(button_row_1_frame, variable=append_path, text="Append")
+checkbox.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["checkbox"]))
+checkbox.pack(side=LEFT)
 #Create a button widget
 load_file_button = ttk.Button(button_row_1_frame, text="Load Audio", command=lambda:loadFileHelper("audio"), padding="2 2 2 2")
 #Set an event to happen if the mouse cursor hovers over the load file button
@@ -789,9 +831,6 @@ load_file_button.pack(side=LEFT, padx=1, pady=2)
 load_folder_button = ttk.Button(button_row_1_frame, text="Load Folder", command=lambda:loadFileHelper("folder"), padding="2 2 2 2")
 load_folder_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_folder_button"]))
 load_folder_button.pack(side=LEFT, padx=1, pady=2)
-load_csv_file_button = ttk.Button(button_row_1_frame, text="Load Features", command=lambda:loadFileHelper("csv"), padding="2 2 2 2")
-load_csv_file_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_csv_file_button"]))
-load_csv_file_button.pack(side=LEFT, padx=1, pady=2)
 # Don't need the extract button anymore
 # extract_button = ttk.Button(button_row_1_frame, text="Extract features", command=extract_flag.set, padding="2 2 2 2", state=DISABLED)
 # extract_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["extract_button"]))
@@ -799,20 +838,18 @@ load_csv_file_button.pack(side=LEFT, padx=1, pady=2)
 predict_genre_button = ttk.Button(button_row_1_frame, text="Predict Genre", command=predict_genre_flag.set, state=DISABLED)
 predict_genre_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["predict_genre_button"]))
 predict_genre_button.pack(side=LEFT, padx=1, pady=2)
-
-#TODO: Fix the position
-#Maybe put the checkbox in this row
-show_advanced_button = ttk.Button(root, text="Show Options", command=lambda: changeAdvanced("show"))
-show_advanced_button.bind('<Enter>', hint_text.set(HINT_TEXT["show_options_button"]))
-show_advanced_button.pack()
+show_advanced_button = ttk.Button(button_row_1_frame, width=13, text="Show Options", command=lambda: updateUI("show_options"))
+show_advanced_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["show_options_button"]))
+show_advanced_button.pack(side=LEFT, padx=1, pady=2)
+#Hide button remains unpacked for now
+hide_advanced_button = ttk.Button(button_row_1_frame, width=13, text="Hide Options", command=lambda: updateUI("hide_options"))
+hide_advanced_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["hide_options_button"]))
+# hide_advanced_button.pack(side=LEFT)
 
 #MARK: Model buttons
 model_frame = ttk.Frame(root, padding="0 2 0 2")
 button_row_2_frame = ttk.Frame(model_frame, padding="2 2 2 2")
 button_row_2_frame.pack(anchor=N, side=TOP)
-hide_advanced_button = ttk.Button(button_row_2_frame, text="Hide Options", command=lambda: changeAdvanced("hide"))
-hide_advanced_button.bind('<Enter>', hint_text.set(HINT_TEXT["hide_options_button"]))
-hide_advanced_button.pack(side=LEFT)
 load_model_button = ttk.Button(button_row_2_frame, text="Load Model", command=load_model_flag.set)
 load_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_model_button"]))
 load_model_button.pack(side=LEFT)
@@ -822,6 +859,9 @@ train_model_button.pack(side=LEFT)
 save_model_button = ttk.Button(button_row_2_frame, text="Save Model", command=save_model_flag.set, state=DISABLED)
 save_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["save_model_button"]))
 save_model_button.pack(side=LEFT)
+load_csv_file_button = ttk.Button(button_row_2_frame, text="Load CSV", command=lambda:loadFileHelper("csv"), padding="2 2 2 2")
+load_csv_file_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_csv_file_button"]))
+load_csv_file_button.pack(side=LEFT)
 save_button = ttk.Button(button_row_2_frame, text="Save CSV", command=save_file_flag.set, padding="2 2 2 2", state=DISABLED)
 save_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["save_button"]))
 save_button.pack(side=LEFT)
@@ -875,11 +915,17 @@ model_loaded_label = ttk.Label(file_path_frame, textvariable=model_loaded_text, 
 file_frame.bind('<Configure>', lambda a: setWraplength(a, label="model_loaded_label"))
 model_loaded_label.pack(padx=3, fill=X, expand=True)
 #This label shows the text above the paths
-file_label = ttk.Label(file_path_frame, text="Selected file path(s):")
-file_label.pack(anchor=W, padx=3, pady=(2,0))
+file_text_label = ttk.Label(file_path_frame, text="Selected file path(s):")
+file_text_label.pack(anchor=W, padx=3, pady=(2,0))
 #This label shows the file paths
 file_path_label = ttk.Label(file_path_frame, textvariable=file_path)
 file_path_label.pack(padx=3, pady=1, expand=True, anchor=W)
+#This frame shows the predicted genres
+genre_frame = ttk.Frame(file_frame)
+genre_text_label = ttk.Label(genre_frame, text="Predicted Genres:")
+genre_text_label.pack(padx=3, anchor=W)
+genre_label = ttk.Label(genre_frame, textvariable=predicted_genres)
+genre_label.pack(padx=3, pady=1, expand=True, anchor=W)
 #Bind scrolling events to the respective windows
 #If scrolling should only be possible inside the frame, it needs to be bound to each label inside
 # file_path_frame_helper.bind_scroll_wheel(file_path_frame_helper)
@@ -917,7 +963,7 @@ try:
     #Update the model loaded text
     model_loaded_text.set(f"Model status:\nLoaded model \"{model_path}\" from the default directory.\nTest Accuracy: {c.test_acc*100:.2f}%, Test Loss: {c.test_loss:.4f}")
     #Set the model available flag
-    setButtonState("loaded_model")
+    updateUI("loaded_model")
     model_available = True
 #No model found/malformed file
 except:

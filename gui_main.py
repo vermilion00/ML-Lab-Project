@@ -42,6 +42,7 @@ from urllib.request import urlopen
 from io import BytesIO
 from pydub import AudioSegment
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import download_range_func
 
 #MARK: Threading events
 extract_flag = threading.Event()
@@ -512,7 +513,7 @@ def incrementProgressHelper():
 
 #MARK: Extract
 #Extracts the features from the loaded audio files
-def startExtraction(source="file"):
+def startExtraction(source="file", segment=None):
     global new_paths
     global result_list
     global already_extracted
@@ -530,7 +531,7 @@ def startExtraction(source="file"):
             try:
                 #Download the url target first if the source isn't a file
                 if source != "file":
-                    y, sr = loadFileFromURL(i)
+                    y, sr = loadFileFromURL(i, segment)
                 else:
                     #Try the easy implementation
                     try:
@@ -620,16 +621,25 @@ def startExtraction(source="file"):
         print(NO_FILES_MSG)
 
 #MARK: Load File URL
-def loadFileFromURL(url):
+def loadFileFromURL(url, segment):
     #Load audio from url
     #TODO: Show download progress bar
     hint_text.set("Downloading file from URL")
     #If url is a youtube link, use yt-dlp
     if "youtu" in url:
-        yt_options = {
-            "format": "bestaudio",
-            "outtmpl": "temp.wav"
-        }
+        if segment == None:
+            yt_options = {
+                "format": "bestaudio",
+                "outtmpl": "temp.wav"
+            }
+        #If a segment is specified, download only that portion
+        else:
+            yt_options = {
+                "format": "bestaudio",
+                "outtmpl": "temp.wav",
+                "download_ranges": download_range_func(None, [(segment[0], segment[1])]),
+                "force_keyframes_at_cuts": True
+            }
         try:
             #TODO: Try saving to BytesIO directly - Need to find out how to reencode the file from bytesIO
             with YoutubeDL(yt_options) as audio:
@@ -847,19 +857,32 @@ def loadURL():
     global paths
     #Check if the entry field contains text
     if url.get() != "":
-        
+        #Check if a length is denoted by e.g. [2,10]
+        split_url = url.get().split(' ')
         #If the checkbox isn't marked or the filepath is empty, replace the text
         if append_path.get() == False or file_path.get() == "No files selected":
             # paths = file_paths
-            file_path.set(url.get())
+            file_path.set(split_url[0])
         #If the checkbox is marked, append to the path
         else:
             #Save the tuple globally to make iterating easier
             # paths += file_paths
             file_path.set(file_path.get() + '\n' + url.get())
+        #Add url to List so that the extraction function will work properly
         new_paths = []
-        new_paths.append(url.get())
-        startExtraction(new_paths)
+        new_paths.append(split_url[0])
+        if len(split_url) == 1:
+            startExtraction(new_paths)
+        else:
+            try:
+                #Convert the string to a list
+                segment = split_url[1].split(',')
+                segment[0] = float(segment[0][1:])
+                segment[1] = float(segment[1][:-1])
+                startExtraction(new_paths, segment)
+            except:
+                print(INVALID_SEGMENT_MSG)
+                mb.showerror(title="Invalid Segment", message=INVALID_SEGMENT_MSG)
     
 
 #MARK: Threading

@@ -108,5 +108,6 @@ MODEL_ALREADY_SAVED_MSG = "The loaded model has already been saved in it's curre
 MODEL_LOADING_FAILED_MSG = "An error has occured when loading the model. Make sure you have selected the correct file, and the .scaler file is not missing."
 MODEL_ALREADY_TRAINED_MSG = "The current model has already been trained with these parameters and features. Would you like to train it again? You can change the parameters using the input fields above."
 NO_MODEL_MSG = "No model is currently loaded. To load a model at startup, train a model and save it in the same directory as this file.\nTo train a model, either extract features from audio files you select using the buttons above, or load a pre-extracted .csv file; then click \"Train Model\"."
+INVALID_SEGMENT_MSG = "Invalid segment. It should look like this: [1.5,4.5] and be separated from the URL by a space."
 
 EXTRACTION_STEPS = 7

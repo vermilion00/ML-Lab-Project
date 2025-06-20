@@ -41,8 +41,10 @@ from sys import argv
 from urllib.request import urlopen
 from io import BytesIO
 from pydub import AudioSegment
+# import yt_dlp
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import download_range_func
+from math import floor
 
 #MARK: Threading events
 extract_flag = threading.Event()
@@ -61,6 +63,7 @@ def updateProgress(process, progress):
     global new_paths
     global model_available
     global extraction_progress
+    global download_progress
     #Check if this is the first call for this progress
     #Since thread 2 crashes if the first call to this function happens with progress > 1, also check for 2
     if progress == 1 or progress == 2:
@@ -76,6 +79,10 @@ def updateProgress(process, progress):
                 total_progress = epochs.get()
                 progress_text.set("Training model: ")
                 updateUI("training_started")
+            case "download":
+                total_progress = 100
+                progress_text.set("Downloading File: ")
+                updateUI("download_started")
         #Replace the hint label with the progress label and bar
         hint_label.pack_forget()
         progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2), fill=X)
@@ -88,6 +95,10 @@ def updateProgress(process, progress):
         progress_bar['value'] = num
     #Process is done
     else:
+        #Limit the max progress value to 100
+        progress_bar["value"] = 100
+        #Hide the progress number
+        progress_number.set("")
         #Do something when process is finished
         match process:
             case "extraction":
@@ -96,17 +107,19 @@ def updateProgress(process, progress):
                 updateUI("extraction_finished")
                 #Reset the extraction progress counter
                 extraction_progress = 0
+                #Sleep for a short time keep the progress completed messages up
+                time.sleep(1)
             case "training":
                 progress_text.set("Training Complete")
                 updateUI("training_finished")
                 #Reset the classifier progress counter
                 classifier.progress = 0
-        #Limit the max progress value to 100
-        progress_bar["value"] = 100
-        #Hide the progress number
-        progress_number.set("")
-        #Sleep for a short time keep the progress completed messages up
-        time.sleep(1)
+                #Sleep for a short time keep the progress completed messages up
+                time.sleep(1)
+            case "download":
+                progress_text.set("Download Complete")
+                updateUI("download_finished")
+                download_progress = 0
         #Hide progress label and bar
         progress_frame.pack_forget()
         #Set the hint label to say that the process is done
@@ -161,14 +174,20 @@ def thread1_handler():
 #training progress when that code is in a separate file
 def thread2_handler():
     global extraction_progress
+    global download_progress
     local_extraction_progress = 0
     local_training_progress = 0
+    local_download_progress = 0
     extraction_progress = 0
+    download_progress = 0
     while True:
-        if extraction_progress != local_extraction_progress:
+        if local_extraction_progress != extraction_progress:
             local_extraction_progress = extraction_progress
             updateProgress("extraction", extraction_progress)
-        elif classifier.progress != local_training_progress:
+        elif local_download_progress != download_progress:
+            local_download_progress = download_progress
+            updateProgress("download", download_progress)
+        elif local_training_progress != classifier.progress:
             local_training_progress = classifier.progress
             updateProgress("training", classifier.progress)
         else:
@@ -620,17 +639,31 @@ def startExtraction(source="file", segment=None):
         mb.showerror(title="No files selected", message=NO_FILES_MSG)
         print(NO_FILES_MSG)
 
+#MARK: Update Hook
+def dlUpdateHook(download):
+    global download_progress
+    percent = download['_percent_str']
+    for i, char in enumerate(percent):
+        if char == '%':
+            value = percent[i-5:i+1].replace('%', '')
+            break
+    download_progress = floor(float(value.replace(' ', '')))
+
 #MARK: Load File URL
 def loadFileFromURL(url, segment):
+    global download_progress
+    global total_progress
+    download_progress = 0
+    #Set the total progress here to avoid crashing the program when loading small files
+    total_progress = 100
     #Load audio from url
-    #TODO: Show download progress bar
-    hint_text.set("Downloading file from URL")
     #If url is a youtube link, use yt-dlp
     if "youtu" in url:
         if segment == None:
             yt_options = {
                 "format": "bestaudio",
-                "outtmpl": "temp.wav"
+                "outtmpl": "temp.wav",
+                "progress_hooks": [dlUpdateHook]
             }
         #If a segment is specified, download only that portion
         else:
@@ -638,7 +671,8 @@ def loadFileFromURL(url, segment):
                 "format": "bestaudio",
                 "outtmpl": "temp.wav",
                 "download_ranges": download_range_func(None, [(segment[0], segment[1])]),
-                "force_keyframes_at_cuts": True
+                "force_keyframes_at_cuts": True,
+                "progress_hooks": [dlUpdateHook]
             }
         try:
             #TODO: Try saving to BytesIO directly - Need to find out how to reencode the file from bytesIO
@@ -794,6 +828,17 @@ def updateUI(key:str):
             genre_frame.pack(after=file_path_label, anchor=W)
             #Update the hint text
             hint_text.set(HINT_TEXT["prediction"])
+        case "download_started":
+            progress_text.set("Downloading file")
+            #Replace the hint label with the progress label
+            hint_label.pack_forget()
+            # progress_bar.config()
+            progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2), fill=X)
+        case "download_finished":
+            hint_text.set("Download finished")
+            #Replace the progress label with the hint label
+            progress_frame.pack_forget()
+            hint_label.pack(padx=2, pady=(0,2), fill=X)
         #TODO: Check if this case exists
         case "loaded_audio":
             #Enable the extract button, since audio paths are now available
@@ -858,7 +903,7 @@ def loadURL():
     #Check if the entry field contains text
     if url.get() != "":
         #Check if a length is denoted by e.g. [2,10]
-        split_url = url.get().split(' ')
+        split_url = url.get().split(' ', maxsplit=1)
         #If the checkbox isn't marked or the filepath is empty, replace the text
         if append_path.get() == False or file_path.get() == "No files selected":
             # paths = file_paths
@@ -867,19 +912,24 @@ def loadURL():
         else:
             #Save the tuple globally to make iterating easier
             # paths += file_paths
-            file_path.set(file_path.get() + '\n' + url.get())
+            file_path.set(file_path.get() + '\n' + split_url[0])
         #Add url to List so that the extraction function will work properly
         new_paths = []
         new_paths.append(split_url[0])
         if len(split_url) == 1:
             startExtraction(new_paths)
         else:
+            #Convert the string to a list
             try:
-                #Convert the string to a list
+                #Remove spaces
+                split_url[1] = split_url[1].replace(' ', '')
+                #Split the string by the comma
                 segment = split_url[1].split(',')
+                #Remove the leading and trailing brackets
                 segment[0] = float(segment[0][1:])
                 segment[1] = float(segment[1][:-1])
                 startExtraction(new_paths, segment)
+            #Malformed segment
             except:
                 print(INVALID_SEGMENT_MSG)
                 mb.showerror(title="Invalid Segment", message=INVALID_SEGMENT_MSG)
@@ -917,6 +967,7 @@ url = StringVar()
 append_path = BooleanVar(value=True)
 #Progress bar progress
 extraction_progress = 0
+download_progress = 0
 total_progress = 0
 #already done flags to ask if they should happen again
 already_extracted = False

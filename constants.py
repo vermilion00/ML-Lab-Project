@@ -28,7 +28,9 @@ HINT_TEXT = {
     "save_model_button": "Click to save the current model to a file. Only available when a model is loaded.",
     "load_model_button": "Click to load a trained model from a .keras file. Automatically loads the corresponding scaler and encoder files",
     "show_options_button": "Click to show options to set the model parameters and load, train and save a new model, as well as save your extracted features to a .csv file.",
-    "hide_options_button": "Click to hide the model buttons and parameters."
+    "hide_options_button": "Click to hide the model buttons and parameters.",
+    "url_entry": "Input the url to a sound file to load it directly.",
+    "load_url_button": "Click the load the audio from the URL in the entry field."
 }
 
 HEADER = (

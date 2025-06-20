@@ -37,6 +37,9 @@ from glob import glob
 import joblib
 from os import path
 from sys import argv
+from urllib.request import urlopen
+from io import BytesIO
+from pydub import AudioSegment
 
 #MARK: Threading events
 extract_flag = threading.Event()
@@ -504,7 +507,7 @@ def incrementProgressHelper():
 
 #MARK: Extract
 #Extracts the features from the loaded audio files
-def startExtraction():
+def startExtraction(source="file"):
     global new_paths
     global result_list
     global already_extracted
@@ -520,9 +523,24 @@ def startExtraction():
         #Iterate over every selected path and extract the audio features
         for i in new_paths:
             try:
-                #Load the audio file using librosa
-                #y is a time-series-array, sr is the sample rate
-                y, sr = librosa.load(i, sr=None)
+                if source == "file":
+                    #Load the audio file using librosa
+                    #y is a time-series-array, sr is the sample rate
+                    y, sr = librosa.load(i, sr=None)
+                else:
+                    #Check if source is not empty
+                    if source != "":
+                        #Load audio from url
+                        #Resample to wav
+                        # wav = BytesIO
+                        # with urlopen(url.get()) as request:
+                        #     request.seek = lambda *args: None
+                        #     AudioSegment.from_file(request).export(wav, "wav")
+                        # #TODO: Is this necessary
+                        # wav.seek(0)
+                        # y, sr = librosa.load(wav, sr=None)
+                        # Load wav directly
+                        y, sr = librosa.load(BytesIO(urlopen(url.get()).read()))
                 extraction_progress += 1
                 #Put (almost) all functions in a list for easy processing
                 feature_function_list = [
@@ -543,7 +561,7 @@ def startExtraction():
                 extraction_progress += 1
                 #Make a feature list, extract the filename from the path, and get length
                 feature_list = [i[i.rindex('/')+1:], librosa.get_duration(y=y, sr=sr)]
-                #Delete the progress helper functions
+                #Delete the progress helper function indexes
                 del feature_function_list[6]
                 #This one is at index 8 since hpss unpacks into two indexes
                 del feature_function_list[8]
@@ -757,6 +775,12 @@ def setWraplength(event, label=None):
             #Subtract 6 from the width for padding
             event.widget.configure(wraplength=event.width-6)
 
+#MARK: Load URL
+def loadURL():
+    global new_paths
+    new_paths.append(url.get())
+    startExtraction(new_paths)
+
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still
 thread1 = threading.Thread(target=thread1_handler, daemon=True)
@@ -775,6 +799,7 @@ root.geometry("428x280")
 c = classifier.Classifier()
 file_path = StringVar(value="No files selected")
 file_paths = []
+new_paths = []
 paths = []
 result_list = []
 file_type = ""
@@ -784,6 +809,7 @@ hint_text = StringVar(value=HINT_TEXT["program_start"])
 progress_text = StringVar()
 progress_number = StringVar()
 predicted_genres = StringVar()
+url = StringVar()
 append_path = BooleanVar(value=True)
 #Progress bar progress
 extraction_progress = 0
@@ -803,8 +829,10 @@ random_state = IntVar(value=c.random_state)
 current_dir = path.dirname(path.abspath(argv[0]))
 
 #MARK: Buttons
+button_helper_frame = ttk.Frame(root)
+button_helper_frame.pack(anchor=N)
 #Make a new frame to group the related buttons together
-button_row_1_frame = ttk.Frame(root, padding="2 0 2 0")
+button_row_1_frame = ttk.Frame(button_helper_frame, padding="2 0 2 0")
 button_row_1_frame.pack(anchor=N, side=TOP)
 #Create a checkbox
 checkbox = ttk.Checkbutton(button_row_1_frame, variable=append_path, text="Append")
@@ -830,23 +858,33 @@ show_advanced_button.pack(side=LEFT, padx=1, pady=2)
 hide_advanced_button = ttk.Button(button_row_1_frame, width=13, text="Hide Options", command=lambda: updateUI("hide_options"))
 hide_advanced_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["hide_options_button"]))
 
+#MARK: URL Widgets
+url_frame = ttk.Frame(button_helper_frame, padding="5 0 5 0")
+url_frame.pack(fill=X)
+url_entry = ttk.Entry(url_frame, textvariable=url, justify=CENTER)
+url_entry.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["url_entry"]))
+url_entry.pack(side=LEFT, fill=X, expand=True)
+load_url_button = ttk.Button(url_frame, text="Load URL", command=loadURL)
+load_url_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_url_button"]))
+load_url_button.pack(side=LEFT)
+
 #MARK: Model buttons
-model_frame = ttk.Frame(root, padding="0 2 0 2")
-button_row_2_frame = ttk.Frame(model_frame, padding="2 2 2 2")
-button_row_2_frame.pack(anchor=N, side=TOP)
-load_model_button = ttk.Button(button_row_2_frame, text="Load Model", command=load_model_flag.set)
+model_frame = ttk.Frame(button_helper_frame, padding="0 2 0 2")
+button_row_3_frame = ttk.Frame(model_frame, padding="2 2 2 2")
+button_row_3_frame.pack(anchor=N, side=TOP)
+load_model_button = ttk.Button(button_row_3_frame, text="Load Model", command=load_model_flag.set)
 load_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_model_button"]))
 load_model_button.pack(side=LEFT)
-train_model_button = ttk.Button(button_row_2_frame, text="Train Model", command=train_model_flag.set, state=DISABLED)
+train_model_button = ttk.Button(button_row_3_frame, text="Train Model", command=train_model_flag.set, state=DISABLED)
 train_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["train_model_button"]))
 train_model_button.pack(side=LEFT)
-save_model_button = ttk.Button(button_row_2_frame, text="Save Model", command=save_model_flag.set, state=DISABLED)
+save_model_button = ttk.Button(button_row_3_frame, text="Save Model", command=save_model_flag.set, state=DISABLED)
 save_model_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["save_model_button"]))
 save_model_button.pack(side=LEFT)
-load_csv_file_button = ttk.Button(button_row_2_frame, text="Load CSV", command=lambda:loadFileHelper("csv"), padding="2 2 2 2")
+load_csv_file_button = ttk.Button(button_row_3_frame, text="Load CSV", command=lambda:loadFileHelper("csv"), padding="2 2 2 2")
 load_csv_file_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["load_csv_file_button"]))
 load_csv_file_button.pack(side=LEFT)
-save_button = ttk.Button(button_row_2_frame, text="Save CSV", command=save_file_flag.set, padding="2 2 2 2", state=DISABLED)
+save_button = ttk.Button(button_row_3_frame, text="Save CSV", command=save_file_flag.set, padding="2 2 2 2", state=DISABLED)
 save_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["save_button"]))
 save_button.pack(side=LEFT)
 

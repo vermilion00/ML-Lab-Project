@@ -5,6 +5,7 @@ FORBIDDEN_CHARS = r'[\\/:*?"<>|]' #Not allowed in windows file names
 HINT_TEXT = {
     "program_start": "Hover over an element to see an explanation.",
     "program_start_long": "If you have a model file placed in the default directory, it will be loaded at program start. To train a model, either load and extract features from audio files or select a pre-extracted feature file, then click \"Train model\". To classify audio, you need to have a model loaded. Select the audio files and extract their features before predicting their genre.",
+    "checkbox": "Decide whether new selections will append to the current selection or overwrite them.",
     "load_file_button": "Click to select the audio file(s) you wish to import.",
     "load_csv_file_button": "Click to select a pre-extracted feature list. The file needs to follow the GTZAN .csv file layout.",
     "load_folder_button": "Click to select a folder containing the audio files you wish to import.",
@@ -17,6 +18,7 @@ HINT_TEXT = {
     "no_files_found": "No audio or csv files found in directory.",
     "extraction": "Extraction completed.",
     "training": "Training completed",
+    "prediction": "Prediction completed - You may need to scroll down to see the results.",
     "learning_rate": "Input the learning rate for the model as a float.",
     "epochs": "Input the epoch amount for the model as an Int.",
     "batch_size": "Input the batch size for the model as an Int.",
@@ -25,7 +27,9 @@ HINT_TEXT = {
     "train_model_button": "Click to train the model with the loaded feature set using the parameters set above. This also scales the features and splits the feature set. The process will take a while.",
     "predict_genre_button": "Click to predict the genre of the loaded feature set(s).",
     "save_model_button": "Click to save the current model to a file. Only available when a model is loaded.",
-    "load_model_button": "Click to load a trained model from a .keras file. Automatically loads the corresponding scaler and encoder files"
+    "load_model_button": "Click to load a trained model from a .keras file. Automatically loads the corresponding scaler and encoder files",
+    "show_options_button": "Click to show options to set the model parameters and load, train and save a new model, as well as save your extracted features to a .csv file.",
+    "hide_options_button": "Click to hide the model buttons and parameters."
 }
 
 HEADER = (

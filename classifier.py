@@ -141,18 +141,17 @@ class Classifier:
                     #Capitalize the genre because the labels are lower case
                     new_result.append((item[0].capitalize(), f'{item[1]*100:.2f}%'))
                 print(f"Predicted Genres: {new_result}")
-                #TODO: When the result is displayed in a better way, rework this
                 #Return only the most likely result to display on the hint text
                 result_list.append(new_result[0])
             #If only one result is available, return the result as a string
             if len(result_list) == 1:
                 #Double indexing because result_list is a tuple within a list
-                return f"{result_list[0][0]} with a probability of {result_list[0][1]}"
+                return f"{result_list[0][0]} with a probability of {result_list[0][1]}, {new_result[1:]}"
             #If more, then loop through all of them and prepend their number
             else:
                 result_string = ""
                 for idx, genre in enumerate(result_list):
-                    result_string += f"File {idx+1}: {genre[0]} with a probability of {genre[1]}\n"
+                    result_string += f"File {idx+1}: {genre[0]} with a probability of {genre[1]}, {new_result[1:]}\n"
                 #Cut off the last newline when returning
                 return result_string[:-1]
         except Exception as e:

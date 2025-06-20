@@ -18,8 +18,8 @@
 # Separate first x songs from each class out for testing (first 2 of each?)
 # Add message showing which ones belong there
 # Allow appending to path from csv
-# Show download progress
 # Find out why predicted genre text displays over the scroll bar
+# Switch to requests lib for progress callback?
 
 from constants import *
 import classifier
@@ -258,9 +258,14 @@ def loadCSV():
         filetypes = filetypes
     )
     if file_path_str != "":
-        file_path.set(file_path_str)
-        #Reset selected audio file paths if csv is selected
-        paths = []
+         #If the checkbox isn't marked or the filepath is empty, replace the text
+        if append_path.get() == False or file_path.get() == "No files selected":
+            #Reset paths and file text
+            paths = []
+            file_path.set(file_path_str)
+        else:
+            #If the checkbox is marked, append to the path
+            file_path.set(file_path.get() + '\n' + file_path_str)
         readCSV(file_path_str)
 
 #MARK: Load Folder
@@ -306,7 +311,7 @@ def loadFolder():
                 new_paths = list(file_paths)
                 #Save the tuple globally to make iterating easier
                 paths += file_paths
-            file_path.set(file_path.get() + '\n' + file_path_str)
+                file_path.set(file_path.get() + '\n' + file_path_str)
             #Since new data is available, reset extracted flag
             already_extracted = False
             #Extract files after loading them
@@ -319,15 +324,19 @@ def loadFolder():
             file_paths += glob(file_path_str + '*.csv')
             #Check if a csv file has been found
             if file_paths != []:
-                #Reset audio file paths since features are now read from csv instead
-                paths = []
                 #Only take the first csv, since all tracks should be in one
                 file_path_str = file_paths[0].replace('\\', '/')
                 file_paths = list(file_path_str)
+                if append_path.get() == False or file_path.get() == "No files selected":
+                    #Reset path
+                    paths = []
+                    #Set the file path string in the gui
+                    file_path.set(file_path_str)
+                else:
+                    #Append new file to file text
+                    file_path.set(file_path.get() + '\n' + file_path_str)
                 #Read the contents of the csv file into memory
                 readCSV(file_path_str)
-                #Set the file path string in the gui
-                file_path.set(file_path_str)
             #No audio or csv files found
             else:
                 #Look if folder contains subfolders, empty list if none available
@@ -385,10 +394,8 @@ def readCSV(csv_path):
     global already_saved
     global model_already_trained
     #Reset the result list
-    result_list = []
-    #Catch possible error
-    #TODO: Fix
-    paths = []
+    if append_path.get() == False or file_path.get() == "No files selected":
+        result_list = []
     try:
         #Open the csv file
         with open(csv_path) as csv_file:
@@ -640,30 +647,30 @@ def startExtraction(source="file", segment=None):
         print(NO_FILES_MSG)
 
 #MARK: Update Hook
-def dlUpdateHook(download):
+def ytUpdateHook(download):
     global download_progress
     percent = download['_percent_str']
     for i, char in enumerate(percent):
         if char == '%':
             value = percent[i-5:i+1].replace('%', '')
             break
+    #Save the progress as an int
     download_progress = floor(float(value.replace(' ', '')))
 
 #MARK: Load File URL
 def loadFileFromURL(url, segment):
-    global download_progress
     global total_progress
-    download_progress = 0
     #Set the total progress here to avoid crashing the program when loading small files
     total_progress = 100
     #Load audio from url
     #If url is a youtube link, use yt-dlp
-    if "youtu" in url:
+    # if ".youtu.be" in url or ".youtube." in url:
+    try:
         if segment == None:
             yt_options = {
                 "format": "bestaudio",
                 "outtmpl": "temp.wav",
-                "progress_hooks": [dlUpdateHook]
+                "progress_hooks": [ytUpdateHook]
             }
         #If a segment is specified, download only that portion
         else:
@@ -672,7 +679,7 @@ def loadFileFromURL(url, segment):
                 "outtmpl": "temp.wav",
                 "download_ranges": download_range_func(None, [(segment[0], segment[1])]),
                 "force_keyframes_at_cuts": True,
-                "progress_hooks": [dlUpdateHook]
+                "progress_hooks": [ytUpdateHook]
             }
         try:
             #TODO: Try saving to BytesIO directly - Need to find out how to reencode the file from bytesIO
@@ -686,9 +693,10 @@ def loadFileFromURL(url, segment):
             print(f"Failed to load YouTube URL.\n{e}")
             mb.showerror("Failed to load YouTube URL", message=f"Failed to load YouTube URL. This function needs to have ffmpeg installed and added to path in order to run.\n{e}")
     #Try using this easy implementation
-    else:
+    except:
+    # else:
         try:
-            file = BytesIO(urlopen(url.get()).read())
+            file = BytesIO(urlopen(url).read())
             hint_text.set("Download complete, loading File")
         except Exception as e:
             print(f"URL failed to load.\n{e}")
@@ -701,7 +709,7 @@ def loadFileFromURL(url, segment):
             try:
                 #Resample to wav
                 wav = BytesIO
-                with urlopen(url.get()) as request:
+                with urlopen(url) as request:
                     request.seek = lambda *args: None
                     AudioSegment.from_file(request).export(wav, "wav")
                 wav.seek(0)

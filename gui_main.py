@@ -155,13 +155,13 @@ def thread1_handler():
             trainModelHelper(result_list)
         elif predict_genre_flag.is_set():
             predict_genre_flag.clear()
-            updateUI("prediction_started")
             #Show the predicted genres in their label
+            updateUI("prediction_started")
             match model_type.get():
                 case "Neural Model":
-                    predicted_genres.set(c.predictGenre(result_list))
+                    predicted_genres.set(c.predictGenre(result_list, "neural", used_slow_features))
                 case "Cat Boost":
-                    predicted_genres.set(c.predictGenre(result_list, "cat"))
+                    predicted_genres.set(c.predictGenre(result_list, "cat", used_slow_features))
             updateUI("prediction_finished")
         elif save_model_flag.is_set():
             save_model_flag.clear()
@@ -225,6 +225,8 @@ def loadAudio():
     #Only update file path if selection is made
     #Check for empty string since it returns nothing when cancelled, instead of an empty list
     if file_paths != "":
+        #In case the extraction is cancelled, save the old path to restore it
+        old_path = file_path.get()
         file_path_str = ""
         #Add newlines at the end of each path for the gui display
         for i in file_paths:
@@ -247,8 +249,11 @@ def loadAudio():
         #Since new data is available, reset extracted flag
         already_extracted = False
         #Extract files after loading them
-        startExtraction()
-        updateUI("loaded_audio")
+        if startExtraction() == "cancelled":
+            #If the extraction is cancelled, restore the old path
+            file_path.set(old_path)
+        else:
+            updateUI("loaded_audio")
 
 #MARK: Load CSV
 def loadCSV():
@@ -286,6 +291,8 @@ def loadFolder():
     if file_path_str != "":
         file_path_str += '/'
         file_paths = []
+        #Save the old path to restore it if extraction is cancelled
+        old_path = file_path.get()
         #Look for all allowed filetypes in the folder and add them to path list
         #TODO: glob files in single lookup instead of looping over each ending
         for filetype in ('*.wav', '*.mp3', '*.flac', '*.ogg'):
@@ -320,8 +327,12 @@ def loadFolder():
             #Since new data is available, reset extracted flag
             already_extracted = False
             #Extract files after loading them
-            startExtraction()
-            updateUI("loaded_audio")
+            if startExtraction() == "cancelled":
+                #If the extraction is cancelled, restore the old path
+                file_path.set(old_path)
+            else:
+                #Update GUI accordingly
+                updateUI("loaded_audio")
     
         #If file path is empty, look for csv file instead
         else:
@@ -383,9 +394,12 @@ def loadFolder():
                             #Since new data is available, reset extracted flag
                             already_extracted = False
                             #Extract files after loading them
-                            startExtraction()
-                            #Set the button state accordingly
-                            updateUI("loaded_audio")
+                            if startExtraction() == "cancelled":
+                                #If the extraction is cancelled, restore the old path
+                                file_path.set(old_path)
+                            else:
+                                #Update GUI accordingly
+                                updateUI("loaded_audio")
                         #No files found in subfolders
                         else:
                             mb.showinfo(title="No files found", message="No files have been found in any subfolders.")
@@ -398,6 +412,7 @@ def readCSV(csv_path):
     global result_list
     global already_saved
     global model_already_trained
+    global used_slow_features
     #Reset the result list
     if append_path.get() == False or file_path.get() == "No files selected":
         result_list = []
@@ -428,6 +443,7 @@ def readCSV(csv_path):
             model_already_trained = False
             #Update the button state accordingly
             updateUI("opened_csv")
+            used_slow_features = use_slow_features.get()
     except Exception as e:
         #Error when opening the csv file
         print(READ_CSV_FAILED_MSG)
@@ -494,8 +510,8 @@ def saveModel():
     if filename != "":
         #Catch errors when writing to file
         try:
-            #Combine the model, scaler and label encoder into one List
-            obj_list = [c.model, c.scaler, c.label_encoder, c.test_acc, c.test_loss]
+            #Combine the model, scaler and label encoder etc into one List
+            obj_list = [c.model, c.scaler, c.label_encoder, c.test_acc, c.test_loss, c.used_slow_features]
             #Save the list to the selected path
             joblib.dump(obj_list, filename)
             #Set the saved flag
@@ -551,9 +567,23 @@ def startExtraction(source="file", segment=None):
     global already_saved
     global model_already_trained
     global extraction_progress
+    global used_slow_features
     #Check if audio files are selected
-    #TODO: Check if paths can be a tuple here - prob not relevant since button is locked anyway
     if new_paths != []:
+        #If the slow feature option is mismatched between the model and the current setting,
+        #ask if it should be changed before extracting
+        if use_slow_features.get() != c.used_slow_features:
+            if c.used_slow_features == True:
+                answer = mb.askyesnocancel(title="Options Mismatch", message=OPTION_MISMATCH_1_MSG)
+            else:
+                answer = mb.askyesnocancel(title="Options Mismatch", message=OPTION_MISMATCH_2_MSG)
+            #If the answer is yes, change the setting to match the model
+            if answer == True:
+                use_slow_features.set(c.used_slow_features)
+            #If the prompt was cancelled, abort the function call
+            elif answer == None:
+                return "cancelled"
+            #If the answer is no, just continue
         #Only clear already extracted data if append path isn't checkeds
         if append_path.get() == False:
             result_list = []
@@ -581,21 +611,39 @@ def startExtraction(source="file", segment=None):
 
                 extraction_progress += 1
                 #Put (almost) all functions in a list for easy processing
-                feature_function_list = [
-                    feature.chroma_stft(y=y, sr=sr),
-                    feature.rms(y=y),
-                    feature.spectral_centroid(y=y, sr=sr),
-                    feature.spectral_bandwidth(y=y, sr=sr),
-                    feature.spectral_rolloff(y=y, sr=sr),
-                    feature.zero_crossing_rate(y=y),
-                    #Add helper function to increment progress counter during list execution
-                    incrementProgressHelper(),
-                    #Use an unpacking operator since this returns two values we need
-                    *effects.hpss(y=y),
-                    incrementProgressHelper(),
-                    #Use an unpacking operator since this returns a list of lists
-                    *feature.mfcc(y=y, sr=sr)
-                ]
+                if use_slow_features.get() == True:
+                    feature_function_list = [
+                        feature.chroma_stft(y=y, sr=sr),
+                        feature.rms(y=y),
+                        feature.spectral_centroid(y=y, sr=sr),
+                        feature.spectral_bandwidth(y=y, sr=sr),
+                        feature.spectral_rolloff(y=y, sr=sr),
+                        feature.zero_crossing_rate(y=y),
+                        #Add helper function to increment progress counter during list execution
+                        incrementProgressHelper(),
+                        #Use an unpacking operator since this returns two values we need
+                        *effects.hpss(y=y),
+                        incrementProgressHelper(),
+                        #Use an unpacking operator since this returns a list of lists
+                        *feature.mfcc(y=y, sr=sr)
+                    ]
+                #Don't extract hpss
+                else:
+                    feature_function_list = [
+                        feature.chroma_stft(y=y, sr=sr),
+                        feature.rms(y=y),
+                        feature.spectral_centroid(y=y, sr=sr),
+                        feature.spectral_bandwidth(y=y, sr=sr),
+                        feature.spectral_rolloff(y=y, sr=sr),
+                        feature.zero_crossing_rate(y=y),
+                        #Add helper function to increment progress counter during list execution
+                        incrementProgressHelper(),
+                        #Use an unpacking operator since this returns two values we need
+                        0,0,
+                        incrementProgressHelper(),
+                        #Use an unpacking operator since this returns a list of lists
+                        *feature.mfcc(y=y, sr=sr)
+                    ]
                 extraction_progress += 1
                 #Make a feature list, extract the filename from the path, and get length
                 #If the name doesn't follow naming procedure, use default name
@@ -615,7 +663,10 @@ def startExtraction(source="file", segment=None):
                 extraction_progress += 1
                 #Insert the tempo, since the return format is different and no mean or var is needed
                 #Unpack and save the first value, since the rest is not needed
-                feature_list.insert(18, *beat.beat_track(y=y, sr=sr)[0])
+                if use_slow_features.get() == True:
+                    feature_list.insert(18, *beat.beat_track(y=y, sr=sr)[0])
+                else:
+                    feature_list.insert(18, 0)
                 extraction_progress += 1
                 #Get the label from the filename
                 #If the label doesn't follow naming procedure, use default label
@@ -633,6 +684,8 @@ def startExtraction(source="file", segment=None):
                 already_saved = False
                 #Since new data is available that the model can be trained on, clear the flag
                 model_already_trained = False
+                #Update the slow features state
+                used_slow_features = use_slow_features.get()
 
             #A file in the list could not be opened
             except Exception as e:
@@ -730,6 +783,7 @@ def trainModelHelper(result_list):
     global model_already_saved
     global model_already_trained
     global model_available
+    global used_slow_features
     params_changed = False
     try:
         #Check if the parameters have changed
@@ -761,7 +815,7 @@ def trainModelHelper(result_list):
         #Abort the function call
         return
     #Prep the data
-    c.prepareData(result_list)
+    c.prepareData(result_list, use_slow_features=used_slow_features)
     match model_type.get():
         case "Neural Model":
             #Build the model
@@ -992,6 +1046,7 @@ model_type = StringVar(value="Neural Model")
 model_types = ["Neural Model", "Cat Boost"]
 append_path = BooleanVar(value=False)
 use_slow_features = BooleanVar(value=True)
+used_slow_features = use_slow_features.get()
 #Progress bar progress
 extraction_progress = 0
 download_progress = 0
@@ -1139,16 +1194,16 @@ file_frame.bind('<Configure>', lambda a: setWraplength(a, label="model_loaded_la
 model_loaded_label.pack(padx=3, fill=X, expand=True)
 #This label shows the text above the paths
 file_text_label = ttk.Label(file_path_frame, text="Selected files:")
-file_text_label.pack(anchor=W, pady=(2,0))
+file_text_label.pack(padx=3, pady=(2,0), anchor=W)
 #This label shows the file paths
 file_path_label = ttk.Label(file_path_frame, textvariable=file_path)
-file_path_label.pack(expand=True, anchor=W)
+file_path_label.pack(expand=True, anchor=W, padx=3)
 #This frame shows the predicted genres
 genre_frame = ttk.Frame(file_path_frame)
 genre_text_label = ttk.Label(genre_frame, text="Predicted Genres:")
-genre_text_label.pack(pady=(2,0), anchor=W)
+genre_text_label.pack(padx=3, pady=(2,0), anchor=W)
 genre_label = ttk.Label(genre_frame, textvariable=predicted_genres)
-genre_label.pack(anchor=W)
+genre_label.pack(padx=3, anchor=W)
 #Bind scrolling events to the respective windows
 #If scrolling should only be possible inside the frame, it needs to be bound to each label inside
 # file_path_frame_helper.bind_scroll_wheel(file_path_frame_helper)
@@ -1181,6 +1236,7 @@ try:
     #If multiple models are in the starting directory, load the first one found
     model_path = glob("*.keras")[0]
     c.loadModel(model_path)
+    use_slow_features.set(c.used_slow_features)
     hint_text.set(f"Loaded model \"{model_path}\" from the default directory.")
     print(f"Loaded model \"{model_path}\" from the default directory.")
     #Update the model loaded text

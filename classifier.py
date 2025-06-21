@@ -13,7 +13,7 @@ LENGTH_INDEX = 1
 LABEL_INDEX = 59
 #Harmony, perceptr = [14-17]
 #Tempo = 18
-TEST_IDX = [0, 1, 14, 15, 16, 17, 59]
+EXTENDED_DROPPED_IDX = [0, 1, 14, 15, 16, 17, 18, 59]
 DROPPED_IDX = [0, 1, 59]
 
 progress = 0
@@ -37,16 +37,20 @@ class Classifier:
         self.patience = patience
         self.test_acc = None
         self.test_loss = None
+        self.used_slow_features = None
     
     #MARK: Prepare Data
-    def prepareData(self, data_list):
+    def prepareData(self, data_list, use_slow_features=True):
         #Encode the labels into integers
         df = pd.DataFrame(data_list)
         #Label encoder is initialised in the __init__ function
         df[LABEL_INDEX] = self.label_encoder.fit_transform(df[LABEL_INDEX])
         y = df[LABEL_INDEX]
         #Drop label, length and filename columns
-        x = df.drop(DROPPED_IDX, axis=1)
+        if use_slow_features:
+            x = df.drop(DROPPED_IDX, axis=1)
+        else:
+            x = df.drop(EXTENDED_DROPPED_IDX, axis=1)
         columns = x.columns
         #The scaler is the MinMaxScaler
         scaled_data = self.scaler.fit_transform(x)
@@ -58,14 +62,19 @@ class Classifier:
         x_train.shape, x_test.shape, y_train.shape, y_test.shape
         #Assign the split data to the model variables
         self.x_train, self.x_test, self.y_train, self.y_test = x_train, x_test, y_train, y_test
+        self.used_slow_features = use_slow_features
         print("Prepared Data")
+
 
     #MARK: Build Neural
     def buildModel(self):
         model = Sequential()
         #Input shape is 57, since the table has 60 columns and we dropped 3
-        #TODO: Play around with layers
-        model.add(Input(shape=(57,), batch_size=self.batch_size))
+        if self.used_slow_features:
+            model.add(Input(shape=(57,), batch_size=self.batch_size))
+        else:
+            #Since we also dropped harmony, perceptr and tempo
+            model.add(Input(shape=(52,), batch_size=self.batch_size))
         model.add(Flatten())
         # model.add(Dense(units=512, activation='relu'))
         # model.add(Dropout(rate=0.3))
@@ -75,7 +84,6 @@ class Classifier:
         model.add(Dense(units=128, activation='relu'))
         model.add(Dropout(rate=0.3))
         model.add(Dense(units=10, activation='softmax'))
-        # model.summary()
         #Compile the model
         model.compile(
             optimizer=optimizers.Adam(learning_rate=self.learning_rate),
@@ -114,7 +122,7 @@ class Classifier:
         y_pred = model.predict(self.x_test)
         #This function doesn't return a loss score
         self.test_acc = accuracy_score(self.y_test, y_pred)
-        self.test_loss = 0.0000
+        self.test_loss = "-"
         self.model = model
         progress += 1
         return self.test_acc, self.test_loss
@@ -146,7 +154,7 @@ class Classifier:
         return self.test_acc, self.test_loss
 
     #MARK: Predict Genre
-    def predictGenre(self, data, model_type="neural"):
+    def predictGenre(self, data, model_type="neural", use_slow_features=True):
         print("Predicting Genres")
         stripped_data = []
         #Drop the filename, length and label columns + harmony and perceptr features
@@ -154,7 +162,11 @@ class Classifier:
             #Loop through all selected files
             for i in data:
                 #Remove the filename, length and label values
-                stripped_list = i[2:-1]
+                if use_slow_features:
+                    stripped_list = i[2:-1]
+                #Leave out the slow features as well
+                else:
+                    stripped_list = i[2:14] + i[19:-1]
                 #Shape the features to (-1, 1)
                 shaped_list = np.array(stripped_list).reshape(1, -1)
                 #Scale the features using the MinMaxScaler
@@ -204,7 +216,8 @@ class Classifier:
         #Assign the read objects to the respective variables
         self.model, self.scaler, self.label_encoder = obj_list[0], obj_list[1], obj_list[2]
         #Get the accuracy and loss from the saved list
-        self.test_acc, self.test_loss = obj_list[3], obj_list[4]
+        self.test_acc, self.test_loss, self.used_slow_features = obj_list[3], obj_list[4], obj_list[5]
+        print(self.used_slow_features)
     
 #MARK: Callback class
 class Callback(callbacks.Callback):

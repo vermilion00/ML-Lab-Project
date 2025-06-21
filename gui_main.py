@@ -17,8 +17,6 @@
 # Speed up startup somehow
 # Separate first x songs from each class out for testing (first 2 of each?)
 # Add message showing which ones belong there
-# Allow appending to path from csv
-# Find out why predicted genre text displays over the scroll bar
 # Switch to requests lib for progress callback?
 
 from constants import *
@@ -41,7 +39,6 @@ from sys import argv
 from urllib.request import urlopen
 from io import BytesIO
 from pydub import AudioSegment
-# import yt_dlp
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import download_range_func
 from math import floor
@@ -691,7 +688,7 @@ def loadFileFromURL(url, segment):
             remove('temp.wav')
         except Exception as e:
             print(f"Failed to load YouTube URL.\n{e}")
-            mb.showerror("Failed to load YouTube URL", message=f"Failed to load YouTube URL. This function needs to have ffmpeg installed and added to path in order to run.\n{e}")
+            mb.showerror("Failed to load YouTube URL", message=f"Failed to load YouTube URL. Either the URL is invalid, or ffmpeg is not installed correctly and added to PATH.\n{e}")
     #Try using this easy implementation
     except:
     # else:
@@ -833,7 +830,8 @@ def updateUI(key:str):
             predict_genre_button.config(state=NORMAL)
             save_model_button.config(state=NORMAL)
             #Show the genre frame
-            genre_frame.pack(after=file_path_label, anchor=W)
+            # genre_frame.pack(after=file_path_label, anchor=W)
+            genre_frame.pack(anchor=W)
             #Update the hint text
             hint_text.set(HINT_TEXT["prediction"])
         case "download_started":
@@ -955,7 +953,7 @@ thread2.start()
 root = Tk()
 root.title('Music Genre Classifier')
 #Set the minimum size so that all vital elements are still visible
-root.minsize(width=425, height=221)
+root.minsize(width=400, height=224)
 root.geometry("425x280")
 
 c = classifier.Classifier()
@@ -1106,11 +1104,11 @@ file_text_label.pack(anchor=W, padx=3, pady=(2,0))
 file_path_label = ttk.Label(file_path_frame, textvariable=file_path)
 file_path_label.pack(padx=3, expand=True, anchor=W)
 #This frame shows the predicted genres
-genre_frame = ttk.Frame(file_frame)
+genre_frame = ttk.Frame(file_path_frame)
 genre_text_label = ttk.Label(genre_frame, text="Predicted Genres:")
 genre_text_label.pack(padx=3, pady=(2,0), anchor=W)
 genre_label = ttk.Label(genre_frame, textvariable=predicted_genres)
-genre_label.pack(padx=3, expand=True, anchor=W)
+genre_label.pack(padx=3, anchor=W)
 #Bind scrolling events to the respective windows
 #If scrolling should only be possible inside the frame, it needs to be bound to each label inside
 # file_path_frame_helper.bind_scroll_wheel(file_path_frame_helper)

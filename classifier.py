@@ -27,7 +27,6 @@ class Classifier:
         self.y_test = None
         self.model = None
         self.history = None
-        # self.history = None
         self.label_encoder = LabelEncoder()
         self.scaler = MinMaxScaler()
         self.patience = patience
@@ -64,10 +63,10 @@ class Classifier:
         #TODO: Play around with layers
         model.add(Input(shape=(57,), batch_size=self.batch_size))
         model.add(Flatten())
-        model.add(Dense(units=512, activation='relu'))
-        model.add(Dropout(rate=0.3))
+        # model.add(Dense(units=512, activation='relu'))
+        # model.add(Dropout(rate=0.3))
         model.add(Dense(units=256, activation='relu'))
-        model.add(Dropout(rate=0.3))
+        # model.add(Dropout(rate=0.3))
         model.add(BatchNormalization())
         model.add(Dense(units=128, activation='relu'))
         model.add(Dropout(rate=0.3))

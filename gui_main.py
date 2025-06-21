@@ -18,6 +18,10 @@
 # Separate first x songs from each class out for testing (first 2 of each?)
 # Add message showing which ones belong there
 # Switch to requests lib for progress callback?
+# Add dropdown menu to choose classifier
+# Add checkboxes for harmony, perceptr, and display confusion matrix
+# Split models in classifier class, check it respective model is loaded before prediction
+# When changing the model, pack/unpack respective buttons with their own defaults
 
 from constants import *
 import classifier
@@ -153,7 +157,11 @@ def thread1_handler():
             predict_genre_flag.clear()
             updateUI("prediction_started")
             #Show the predicted genres in their label
-            predicted_genres.set(c.predictGenre(result_list))
+            match model_type.get():
+                case "Neural Model":
+                    predicted_genres.set(c.predictGenre(result_list))
+                case "Cat Boost":
+                    predicted_genres.set(c.predictGenre(result_list, "cat"))
             updateUI("prediction_finished")
         elif save_model_flag.is_set():
             save_model_flag.clear()
@@ -754,10 +762,15 @@ def trainModelHelper(result_list):
         return
     #Prep the data
     c.prepareData(result_list)
-    #Build the model
-    c.buildModel()
-    #Train the model
-    test_accuracy, test_loss = c.trainModel()
+    match model_type.get():
+        case "Neural Model":
+            #Build the model
+            c.buildModel()
+            #Train the model
+            test_accuracy, test_loss = c.trainModel()
+        case "Cat Boost":
+            #Cat boost doesn't build the model
+            test_accuracy, test_loss = c.trainModelCat()
     #In case the training is stopped early, add progress to avoid issues
     classifier.progress = epochs.get()
     #Set the new button state
@@ -913,19 +926,20 @@ def loadURL():
         #If the checkbox isn't marked or the filepath is empty, replace the text
         if append_path.get() == False or file_path.get() == "No files selected":
             # paths = file_paths
-            file_path.set(split_url[0])
+            file_path.set(url.get())
         #If the checkbox is marked, append to the path
         else:
             #Save the tuple globally to make iterating easier
             # paths += file_paths
-            file_path.set(file_path.get() + '\n' + split_url[0])
+            file_path.set(file_path.get() + '\n' + url.get())
         #Add url to List so that the extraction function will work properly
         new_paths = []
         new_paths.append(split_url[0])
+        #If the entry only contains the url, just call the function
         if len(split_url) == 1:
             startExtraction(new_paths)
         else:
-            #Convert the string to a list
+            #If the entry contains a segment, parse the segment first
             try:
                 #Remove spaces
                 split_url[1] = split_url[1].replace(' ', '')
@@ -939,6 +953,10 @@ def loadURL():
             except:
                 print(INVALID_SEGMENT_MSG)
                 mb.showerror(title="Invalid Segment", message=INVALID_SEGMENT_MSG)
+
+#MARK: Show Matrix
+def showMatrix():
+    pass
     
 
 #MARK: Threading
@@ -970,7 +988,10 @@ progress_text = StringVar()
 progress_number = StringVar()
 predicted_genres = StringVar()
 url = StringVar()
-append_path = BooleanVar(value=True)
+model_type = StringVar(value="Neural Model")
+model_types = ["Neural Model", "Cat Boost"]
+append_path = BooleanVar(value=False)
+use_slow_features = BooleanVar(value=True)
 #Progress bar progress
 extraction_progress = 0
 download_progress = 0
@@ -1083,12 +1104,31 @@ random_state_frame.pack(side=LEFT)
 random_state_label = ttk.Label(random_state_frame, text="Random State").pack()
 random_state_entry = ttk.Entry(random_state_frame, textvariable=random_state, width=12, justify=CENTER).pack()
 
+#MARK: Model options
+options_frame = ttk.Frame(model_frame, padding="2 5 2 2")
+options_frame.pack()
+dropdown = ttk.Combobox(options_frame,
+                        values=model_types,
+                        textvariable=model_type,
+                        justify=CENTER,
+                        state='readonly')
+#Pre-select the default value
+dropdown.set(model_types[0])
+dropdown.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["dropdown_box"]))
+dropdown.pack(side=LEFT, padx=2)
+show_matrix_button = ttk.Button(options_frame, text="Show Matrix", command=showMatrix)
+show_matrix_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["show_matrix_button"]))
+show_matrix_button.pack(side=LEFT, padx=2)
+slow_features_box = ttk.Checkbutton(options_frame, variable=use_slow_features, text="Use Slow Features")
+slow_features_box.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["slow_features_box"]))
+slow_features_box.pack(side=LEFT, padx=2)
+
 #MARK: Scrolling Frame
 #Scrolling center frame
 file_frame = ttk.Frame(root, padding="2 0 2 0")
 #Set the hint text on a mouse hover event
 file_frame.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["file_path_label"]))
-file_frame.pack(padx=2, anchor=W, fill=BOTH, expand=True)
+file_frame.pack(padx=5, anchor=W, fill=BOTH, expand=True)
 #Create the scrolled frame
 file_path_frame_helper = ScrolledFrame(file_frame, width=400, height=0)
 #Needs a helper frame to display the contents in
@@ -1099,16 +1139,16 @@ file_frame.bind('<Configure>', lambda a: setWraplength(a, label="model_loaded_la
 model_loaded_label.pack(padx=3, fill=X, expand=True)
 #This label shows the text above the paths
 file_text_label = ttk.Label(file_path_frame, text="Selected files:")
-file_text_label.pack(anchor=W, padx=3, pady=(2,0))
+file_text_label.pack(anchor=W, pady=(2,0))
 #This label shows the file paths
 file_path_label = ttk.Label(file_path_frame, textvariable=file_path)
-file_path_label.pack(padx=3, expand=True, anchor=W)
+file_path_label.pack(expand=True, anchor=W)
 #This frame shows the predicted genres
 genre_frame = ttk.Frame(file_path_frame)
 genre_text_label = ttk.Label(genre_frame, text="Predicted Genres:")
-genre_text_label.pack(padx=3, pady=(2,0), anchor=W)
+genre_text_label.pack(pady=(2,0), anchor=W)
 genre_label = ttk.Label(genre_frame, textvariable=predicted_genres)
-genre_label.pack(padx=3, anchor=W)
+genre_label.pack(anchor=W)
 #Bind scrolling events to the respective windows
 #If scrolling should only be possible inside the frame, it needs to be bound to each label inside
 # file_path_frame_helper.bind_scroll_wheel(file_path_frame_helper)

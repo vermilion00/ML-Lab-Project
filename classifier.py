@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from keras import *
 from keras.api.layers import *
 import joblib
@@ -10,6 +11,10 @@ import joblib
 FILENAME_INDEX = 0
 LENGTH_INDEX = 1
 LABEL_INDEX = 59
+#Harmony, perceptr = [14-17]
+#Tempo = 18
+TEST_IDX = [0, 1, 14, 15, 16, 17, 59]
+DROPPED_IDX = [0, 1, 59]
 
 progress = 0
 class Classifier:
@@ -41,8 +46,7 @@ class Classifier:
         df[LABEL_INDEX] = self.label_encoder.fit_transform(df[LABEL_INDEX])
         y = df[LABEL_INDEX]
         #Drop label, length and filename columns
-        x = df.drop([FILENAME_INDEX, LENGTH_INDEX, LABEL_INDEX], axis=1)
-        #Scale the data
+        x = df.drop(DROPPED_IDX, axis=1)
         columns = x.columns
         #The scaler is the MinMaxScaler
         scaled_data = self.scaler.fit_transform(x)
@@ -56,7 +60,7 @@ class Classifier:
         self.x_train, self.x_test, self.y_train, self.y_test = x_train, x_test, y_train, y_test
         print("Prepared Data")
 
-    #MARK: Build Model
+    #MARK: Build Neural
     def buildModel(self):
         model = Sequential()
         #Input shape is 57, since the table has 60 columns and we dropped 3
@@ -73,14 +77,47 @@ class Classifier:
         model.add(Dense(units=10, activation='softmax'))
         # model.summary()
         #Compile the model
-        optimizer = optimizers.Adam(learning_rate=self.learning_rate)
         model.compile(
-            optimizer=optimizer,
+            optimizer=optimizers.Adam(learning_rate=self.learning_rate),
             loss=losses.SparseCategoricalCrossentropy(),
             metrics=['accuracy']
             )
         print("Compiled Model")
         self.model = model
+
+    #MARK: Train Cat
+    def trainModelCat(self, depth=6):
+        global progress
+        #Only import catboost when it's needed
+        from catboost import CatBoostClassifier, Pool
+        progress += 1
+        train_data = Pool(data=self.x_train, label=self.y_train)
+        test_data = Pool(data=self.x_test, label=self.y_test)
+        model = CatBoostClassifier(
+                    iterations=self.epochs,
+                    learning_rate=self.learning_rate,
+                    depth=depth,
+                    eval_metric='Accuracy',
+                    loss_function='MultiClass',
+                    
+                    # early_stopping_rounds=25
+                    # callback=[after_iteration]
+                )
+        progress += 1
+        # model.fit(self.x_train, self.y_train,
+        #             eval_set=(self.x_test, self.y_test),
+        #             # callbacks=[Callback()]
+        #           )
+        model.fit(train_data, eval_set=test_data)
+        progress += 1
+        self.model = model
+        y_pred = model.predict(self.x_test)
+        #This function doesn't return a loss score
+        self.test_acc = accuracy_score(self.y_test, y_pred)
+        self.test_loss = 0.0000
+        self.model = model
+        progress += 1
+        return self.test_acc, self.test_loss
     
     #MARK: Train Model
     def trainModel(self):
@@ -92,14 +129,13 @@ class Classifier:
         )
         #Fit the model with the parameters set in the gui
         self.history = self.model.fit(
-                    x=self.x_train,
-                    y=self.y_train,
-                    epochs=self.epochs,
-                    batch_size=self.batch_size,
-                    validation_data=(self.x_test, self.y_test),
-                    callbacks=[Callback(), early_stopping]
-                    # callbacks=[Callback()]
-                )
+                            x=self.x_train,
+                            y=self.y_train,
+                            epochs=self.epochs,
+                            batch_size=self.batch_size,
+                            validation_data=(self.x_test, self.y_test),
+                            callbacks=[Callback(), early_stopping]
+                        )
         print("Fitted model")
         #Run a test simulation to get an accuracy reading
         #Assign the accuracy and loss values to be able to save them later
@@ -110,7 +146,7 @@ class Classifier:
         return self.test_acc, self.test_loss
 
     #MARK: Predict Genre
-    def predictGenre(self, data):
+    def predictGenre(self, data, model_type="neural"):
         print("Predicting Genres")
         stripped_data = []
         #Drop the filename, length and label columns + harmony and perceptr features
@@ -129,7 +165,11 @@ class Classifier:
             result_list = []
             for song_data in stripped_data:
                 #Make the prediction
-                prediction = self.model.predict(x=song_data)[0]
+                match model_type:
+                    case "neural":
+                        prediction = self.model.predict(song_data)[0]
+                    case "cat":
+                        prediction = self.model.predict(song_data, prediction_type="Probability")[0]
                 #Combine the prediction with the corresponding class
                 result = list(zip(self.label_encoder.classes_, prediction))
                 #Sort the list so that the highest probability is first
@@ -140,23 +180,23 @@ class Classifier:
                     #Capitalize the genre because the labels are lower case
                     new_result.append((item[0].capitalize(), f'{item[1]*100:.2f}%'))
                 print(f"Predicted Genres: {new_result}")
-                #Return only the most likely result to display on the hint text
-                result_list.append(new_result[0])
+                result_list.append(new_result)
+            print(f"\nResult: {result_list}\n")
             #If only one result is available, return the result as a string
             if len(result_list) == 1:
-                #Double indexing because result_list is a tuple within a list
-                return f"{result_list[0][0]} with a probability of {result_list[0][1]}, {new_result[1:]}"
+                #Double indexing because result_list is a tuple within a list within a list
+                return f"{result_list[0][0][0]} with a probability of {result_list[0][0][1]}, {result_list[0][1:]}"
             #If more, then loop through all of them and prepend their number
             else:
                 result_string = ""
-                for idx, genre in enumerate(result_list):
-                    result_string += f"File {idx+1}: {genre[0]} with a probability of {genre[1]}, {new_result[1:]}\n"
+                for idx, song in enumerate(result_list):
+                    result_string += f"File {idx+1}: {song[0][0]} with a probability of {song[0][1]}, {result_list[idx][1:]}\n"
                 #Cut off the last newline when returning
                 return result_string[:-1]
         except Exception as e:
-            print(e)
+            print(f"Prediction failed: {e}")
             return e
-    
+        
     #MARK: Load Model
     def loadModel(self, file_path):
         #Load the keras file containing the model, scaler and label encoder
@@ -169,7 +209,8 @@ class Classifier:
 #MARK: Callback class
 class Callback(callbacks.Callback):
     def __init__(self):
-        self.progress = 0
+        pass
+        # self.test = 0
 
     #Increment the progress counter after each epoch
     def on_epoch_end(self, epoch, logs=None):
@@ -177,6 +218,10 @@ class Callback(callbacks.Callback):
         global progress
         progress += 1
         # return super().on_epoch_end(epoch, logs)
+
+    def after_iteration(self, info):
+        global progress
+        progress += 1
 
     #Incase the training is cancelled early, add to the progress so it doesn't break the program
     # def on_train_end(self, logs=None):

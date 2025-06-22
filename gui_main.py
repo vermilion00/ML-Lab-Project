@@ -815,7 +815,7 @@ def trainModelHelper(result_list):
             test_accuracy, test_loss = c.trainModel()
         case "Cat Boost":
             #Cat boost doesn't build the model
-            test_accuracy, test_loss = c.trainModelCat()
+            test_accuracy, test_loss = c.trainModelCat(depth=6)
     #In case the training is stopped early, add progress to avoid issues
     classifier.progress = epochs.get()
     #Set the new button state
@@ -1161,6 +1161,7 @@ dropdown = ttk.Combobox(options_frame,
 dropdown.set(model_types[0])
 dropdown.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["dropdown_box"]))
 dropdown.pack(side=LEFT, padx=2)
+#Call show matrix function from main thread
 show_matrices_button = ttk.Button(options_frame, text="Show Matrices", command=c.showMatrix, state=DISABLED)
 show_matrices_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["show_matrix_button"]))
 show_matrices_button.pack(side=LEFT, padx=2)

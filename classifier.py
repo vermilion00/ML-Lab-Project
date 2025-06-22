@@ -111,8 +111,7 @@ class Classifier:
                     depth=depth,
                     eval_metric='Accuracy',
                     loss_function='MultiClass',
-                    
-                    # early_stopping_rounds=25
+                    # early_stopping_rounds=50
                     # callback=[after_iteration]
                 )
         progress += 1
@@ -126,11 +125,11 @@ class Classifier:
         y_pred = model.predict(self.x_test)
         #This function doesn't return a loss score
         self.test_acc = accuracy_score(self.y_test, y_pred)
-        self.test_loss = "-"
+        self.test_loss = 0
         self.model = model
         progress += 1
         #Generate the matrices
-        self.generateMatrix()
+        self.generateMatrix("cat")
         return self.test_acc, self.test_loss
     
     #MARK: Train Model
@@ -157,7 +156,7 @@ class Classifier:
         print(f'Test Accuracy: {self.test_acc*100:.2f}%')
         print(f'Test Loss: {self.test_loss:.4f}')
         #Generate the confusion matrices
-        self.generateMatrix()
+        self.generateMatrix("neural")
         #Return the accuracy and loss values to display them in the gui
         return self.test_acc, self.test_loss
 
@@ -201,7 +200,6 @@ class Classifier:
                     new_result.append((item[0].capitalize(), f'{item[1]*100:.2f}%'))
                 print(f"Predicted Genres: {new_result}")
                 result_list.append(new_result)
-            print(f"\nResult: {result_list}\n")
             #If only one result is available, return the result as a string
             if len(result_list) == 1:
                 #Double indexing because result_list is a tuple within a list within a list
@@ -247,19 +245,28 @@ class Classifier:
         self.matrices = obj_list[6]
     
     #MARK: Generate Matrix
-    def generateMatrix(self):
+    def generateMatrix(self, model_type="neural"):
         train_matrix = None
         test_matrix = None
+        #Reset matrix list when new ones are being generateds
+        self.matrices = []
         #Since two matrices need to be generated, put their params in a list to loop through
         matrix_list = [(train_matrix, self.x_train, self.y_train),
                        (test_matrix, self.x_test, self.y_test)]
         #Loop through the list
         for matrix, x, y in matrix_list:
             #Generate the prediction
-            y_pred = self.model.predict(x).argmax(axis=1)
+            match model_type:
+                case "neural":
+                    y_pred = self.model.predict(x).argmax(axis=1)
+                case "cat":
+                    y_pred = self.model.predict(x, prediction_type="Probability").argmax(axis=1)
+            # y_pred = self.model.predict(x).argmax(axis=1)
+            #Capitalize the class names
+            labels = [item.capitalize() for item in self.label_encoder.classes_]
             #Calculate the confusion matrix
             matrix_data = confusion_matrix(y, y_pred)
-            matrix = ConfusionMatrixDisplay(matrix_data, display_labels=self.label_encoder.classes_.capitalize())
+            matrix = ConfusionMatrixDisplay(matrix_data, display_labels=labels)
             #Save the confusion matrix to class variable
             self.matrices.append(matrix)
 
@@ -276,7 +283,6 @@ class Classifier:
             plt.show()
         except Exception as e:
             print(f"Failed to show confusion matrices. \n{e}")
-            return e
 
 
 #MARK: Callback class

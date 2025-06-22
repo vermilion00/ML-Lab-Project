@@ -10,16 +10,12 @@
 # Add button to save new default parameters
 #
 # Fixes to bug:
-# Add button to compute and show confusion matrices
-# Make progress bar progress more uniform - get rid of perceptr and harmony, tempo?
 # - Calls to their functions take too long
 # Program crashes if the first three progress += 1 calls happen too fast
 # Speed up startup somehow
 # Separate first x songs from each class out for testing (first 2 of each?)
 # Add message showing which ones belong there
-# Switch to requests lib for progress callback?
-# Add dropdown menu to choose classifier
-# Add checkboxes for harmony, perceptr, and display confusion matrix
+# Switch to requests lib for download progress callback?
 # Split models in classifier class, check it respective model is loaded before prediction
 # When changing the model, pack/unpack respective buttons with their own defaults
 
@@ -37,7 +33,6 @@ import csv
 import librosa
 from librosa import feature, effects, beat
 from glob import glob
-import joblib
 from os import path, remove
 from sys import argv
 from urllib.request import urlopen
@@ -510,12 +505,8 @@ def saveModel():
     if filename != "":
         #Catch errors when writing to file
         try:
-            #Combine the model, scaler and label encoder etc into one List
-            obj_list = [c.model, c.scaler, c.label_encoder, c.test_acc, c.test_loss, c.used_slow_features]
-            #Save the list to the selected path
-            joblib.dump(obj_list, filename)
             #Set the saved flag
-            model_already_saved = True
+            model_already_saved = c.saveModel(filename)
             hint_text.set("Saved model")
         except Exception as e:
             print(OVERWRITE_FAILED_MSG)
@@ -884,6 +875,8 @@ def updateUI(key:str):
             train_model_button.config(state=NORMAL)
             predict_genre_button.config(state=NORMAL)
             save_model_button.config(state=NORMAL)
+            #Unlock the show matrices button
+            show_matrices_button.config(state=NORMAL)
         case "prediction_started":
             #Lock the model buttons
             load_model_button.config(state=DISABLED)
@@ -937,6 +930,8 @@ def updateUI(key:str):
             genre_frame.pack_forget()
         case "loaded_model":
             save_model_button.config(state=NORMAL)
+            #Unlock the show matrices button
+            show_matrices_button.config(state=NORMAL)
             #If the selected files have been extracted, unlock predict genre button
             if already_extracted:
                 predict_genre_button.config(state=NORMAL)
@@ -1007,11 +1002,6 @@ def loadURL():
             except:
                 print(INVALID_SEGMENT_MSG)
                 mb.showerror(title="Invalid Segment", message=INVALID_SEGMENT_MSG)
-
-#MARK: Show Matrix
-def showMatrix():
-    pass
-    
 
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still
@@ -1171,9 +1161,9 @@ dropdown = ttk.Combobox(options_frame,
 dropdown.set(model_types[0])
 dropdown.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["dropdown_box"]))
 dropdown.pack(side=LEFT, padx=2)
-show_matrix_button = ttk.Button(options_frame, text="Show Matrix", command=showMatrix)
-show_matrix_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["show_matrix_button"]))
-show_matrix_button.pack(side=LEFT, padx=2)
+show_matrices_button = ttk.Button(options_frame, text="Show Matrices", command=c.showMatrix, state=DISABLED)
+show_matrices_button.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["show_matrix_button"]))
+show_matrices_button.pack(side=LEFT, padx=2)
 slow_features_box = ttk.Checkbutton(options_frame, variable=use_slow_features, text="Use Slow Features")
 slow_features_box.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["slow_features_box"]))
 slow_features_box.pack(side=LEFT, padx=2)

@@ -2,10 +2,11 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
 from keras import *
 from keras.api.layers import *
 import joblib
+import matplotlib.pyplot as plt
 
 #Label column index
 FILENAME_INDEX = 0
@@ -38,6 +39,9 @@ class Classifier:
         self.test_acc = None
         self.test_loss = None
         self.used_slow_features = None
+        self.train_matrix = None
+        self.test_matrix = None
+        self.matrices = []
     
     #MARK: Prepare Data
     def prepareData(self, data_list, use_slow_features=True):
@@ -125,6 +129,8 @@ class Classifier:
         self.test_loss = "-"
         self.model = model
         progress += 1
+        #Generate the matrices
+        self.generateMatrix()
         return self.test_acc, self.test_loss
     
     #MARK: Train Model
@@ -150,6 +156,8 @@ class Classifier:
         self.test_loss, self.test_acc = self.model.evaluate(self.x_test, self.y_test, verbose=1)
         print(f'Test Accuracy: {self.test_acc*100:.2f}%')
         print(f'Test Loss: {self.test_loss:.4f}')
+        #Generate the confusion matrices
+        self.generateMatrix()
         #Return the accuracy and loss values to display them in the gui
         return self.test_acc, self.test_loss
 
@@ -209,6 +217,24 @@ class Classifier:
             print(f"Prediction failed: {e}")
             return e
         
+    #MARK: Save Model
+    def saveModel(self, file_path):
+        #Combine the model, scaler and label encoder etc into one List
+        obj_list = [self.model,
+                    self.scaler,
+                    self.label_encoder,
+                    self.test_acc,
+                    self.test_loss,
+                    self.used_slow_features,
+                    self.matrices]
+        #Attempt to save the list
+        try:
+            #Save the list to the selected path
+            joblib.dump(obj_list, file_path)
+            return True
+        except:
+            return False
+
     #MARK: Load Model
     def loadModel(self, file_path):
         #Load the keras file containing the model, scaler and label encoder
@@ -217,8 +243,42 @@ class Classifier:
         self.model, self.scaler, self.label_encoder = obj_list[0], obj_list[1], obj_list[2]
         #Get the accuracy and loss from the saved list
         self.test_acc, self.test_loss, self.used_slow_features = obj_list[3], obj_list[4], obj_list[5]
-        print(self.used_slow_features)
+        #Get the confusion matrices from the list
+        self.matrices = obj_list[6]
     
+    #MARK: Generate Matrix
+    def generateMatrix(self):
+        train_matrix = None
+        test_matrix = None
+        #Since two matrices need to be generated, put their params in a list to loop through
+        matrix_list = [(train_matrix, self.x_train, self.y_train),
+                       (test_matrix, self.x_test, self.y_test)]
+        #Loop through the list
+        for matrix, x, y in matrix_list:
+            #Generate the prediction
+            y_pred = self.model.predict(x).argmax(axis=1)
+            #Calculate the confusion matrix
+            matrix_data = confusion_matrix(y, y_pred)
+            matrix = ConfusionMatrixDisplay(matrix_data, display_labels=self.label_encoder.classes_.capitalize())
+            #Save the confusion matrix to class variable
+            self.matrices.append(matrix)
+
+    #MARK: Show Matrix
+    def showMatrix(self):
+        try:
+            #Plot the training matrix
+            self.matrices[0].plot(xticks_rotation='vertical', cmap='RdPu')
+            plt.title("Training Confusion Matrix")
+            #Plot the testing matrix
+            self.matrices[1].plot(xticks_rotation='vertical', cmap='RdPu')
+            plt.title("Testing Confusion Matrix")
+            #Show the matrices on screen
+            plt.show()
+        except Exception as e:
+            print(f"Failed to show confusion matrices. \n{e}")
+            return e
+
+
 #MARK: Callback class
 class Callback(callbacks.Callback):
     def __init__(self):

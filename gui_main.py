@@ -945,6 +945,9 @@ def updateUI(key:str):
             hide_advanced_button.pack(after=predict_genre_button, side=LEFT, padx=1, pady=2)
             #Show the advanced options
             model_frame.pack(anchor=N)
+            #Increase the window height by the options height, which is 107
+            height = root.winfo_height()
+            root.geometry(f"{root.winfo_width()}x{height+107}")
         case "hide_options":
             #Hide the advanced options    
             model_frame.pack_forget()
@@ -952,6 +955,9 @@ def updateUI(key:str):
             hide_advanced_button.pack_forget()
             #Show the show advanced button
             show_advanced_button.pack(after=predict_genre_button, side=LEFT, padx=1, pady=2)
+            #Decrease the window height by the options height
+            height = root.winfo_height()
+            root.geometry(f"{root.winfo_width()}x{height-107}")
 
 #MARK: Wraplength
 #Set the wraplength of the label based on the window size
@@ -1019,7 +1025,7 @@ root = Tk()
 root.title('Music Genre Classifier')
 #Set the minimum size so that all vital elements are still visible
 root.minsize(width=400, height=224)
-root.geometry("425x280")
+root.geometry("430x340")
 
 c = classifier.Classifier(patience=1000)
 file_path = StringVar(value="No files selected")

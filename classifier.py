@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import accuracy_score, log_loss
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from keras import *
 from keras.api.layers import *
 import joblib
@@ -21,7 +22,8 @@ progress = 0
 class Classifier:
     #MARK: Init
     #High epoch amount is fine since early stopping is available
-    def __init__(self, learning_rate=0.00011, epochs=300, test_size=0.1, random_state=111, batch_size=20, patience=40):
+    def __init__(self, learning_rate=0.0009, epochs=1000, test_size=0.1, random_state=42, batch_size=40, patience=40):
+    # def __init__(self, learning_rate=0.00011, epochs=300, test_size=0.1, random_state=111, batch_size=20, patience=40):
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.test_size = test_size
@@ -63,7 +65,7 @@ class Classifier:
         #Split the model into training and testing data
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=self.test_size, random_state=self.random_state)
         #TODO: What does this do?
-        x_train.shape, x_test.shape, y_train.shape, y_test.shape
+        # x_train.shape, x_test.shape, y_train.shape, y_test.shape
         #Assign the split data to the model variables
         self.x_train, self.x_test, self.y_train, self.y_test = x_train, x_test, y_train, y_test
         self.used_slow_features = use_slow_features
@@ -80,12 +82,12 @@ class Classifier:
             #Since we also dropped harmony, perceptr and tempo
             model.add(Input(shape=(52,), batch_size=self.batch_size))
         model.add(Flatten())
-        # model.add(Dense(units=512, activation='relu'))
-        # model.add(Dropout(rate=0.3))
+        model.add(Dense(units=512, activation='relu'))
+        model.add(Dropout(rate=0.3))
         model.add(Dense(units=256, activation='relu'))
         # model.add(Dropout(rate=0.3))
         model.add(BatchNormalization())
-        model.add(Dense(units=128, activation='relu'))
+        model.add(Dense(units=128, activation='tanh'))
         model.add(Dropout(rate=0.3))
         model.add(Dense(units=10, activation='softmax'))
         #Compile the model
@@ -98,38 +100,39 @@ class Classifier:
         self.model = model
 
     #MARK: Train Cat
-    def trainModelCat(self, depth=6):
+    def trainModelCat(self, depth=6, task_type="CPU"):
         global progress
         #Only import catboost when it's needed
         from catboost import CatBoostClassifier, Pool
-        progress += 1
         train_data = Pool(data=self.x_train, label=self.y_train)
         test_data = Pool(data=self.x_test, label=self.y_test)
+        test = CatCallback()
         model = CatBoostClassifier(
                     iterations=self.epochs,
                     learning_rate=self.learning_rate,
                     depth=depth,
                     eval_metric='Accuracy',
                     loss_function='MultiClass',
-                    # early_stopping_rounds=50
-                    # callback=[after_iteration]
+                    early_stopping_rounds=self.epochs/5,
+                    task_type=task_type
                 )
-        progress += 1
-        # model.fit(self.x_train, self.y_train,
-        #             eval_set=(self.x_test, self.y_test),
-        #             # callbacks=[Callback()]
-        #           )
-        model.fit(train_data, eval_set=test_data)
-        progress += 1
+        if task_type == "CPU":
+            model.fit(train_data, eval_set=test_data, callbacks=[test])
+        else:
+            #User defined callbacks aren't supported on the GPU
+            model.fit(train_data, eval_set=test_data)
         self.model = model
         y_pred = model.predict(self.x_test)
-        #This function doesn't return a loss score
+        #Get the accuracy and loss scores
         self.test_acc = accuracy_score(self.y_test, y_pred)
+        # self.test_loss = log_loss(self.y_test, y_pred)
         self.test_loss = 0
         self.model = model
-        progress += 1
         #Generate the matrices
         self.generateMatrix("cat")
+        #Set the progress to max in case of early stop
+        progress = self.epochs
+        #Return the accuracy and loss to display on the GUI
         return self.test_acc, self.test_loss
     
     #MARK: Train Model
@@ -147,6 +150,7 @@ class Classifier:
                             epochs=self.epochs,
                             batch_size=self.batch_size,
                             validation_data=(self.x_test, self.y_test),
+                            # callbacks=[Callback()]
                             callbacks=[Callback(), early_stopping]
                         )
         print("Fitted model")
@@ -174,7 +178,7 @@ class Classifier:
                 #Leave out the slow features as well
                 else:
                     stripped_list = i[2:14] + i[19:-1]
-                #Shape the features to (-1, 1)
+                #Shape the feature list
                 shaped_list = np.array(stripped_list).reshape(1, -1)
                 #Scale the features using the MinMaxScaler
                 scaled_list = self.scaler.transform(shaped_list)
@@ -217,7 +221,7 @@ class Classifier:
         
     #MARK: Save Model
     def saveModel(self, file_path):
-        #Combine the model, scaler and label encoder etc into one List
+        #Combine the model, scaler and label encoder etc into one list
         obj_list = [self.model,
                     self.scaler,
                     self.label_encoder,
@@ -248,7 +252,7 @@ class Classifier:
     def generateMatrix(self, model_type="neural"):
         train_matrix = None
         test_matrix = None
-        #Reset matrix list when new ones are being generateds
+        #Reset matrix list when new ones are being generated
         self.matrices = []
         #Since two matrices need to be generated, put their params in a list to loop through
         matrix_list = [(train_matrix, self.x_train, self.y_train),
@@ -261,7 +265,6 @@ class Classifier:
                     y_pred = self.model.predict(x).argmax(axis=1)
                 case "cat":
                     y_pred = self.model.predict(x, prediction_type="Probability").argmax(axis=1)
-            # y_pred = self.model.predict(x).argmax(axis=1)
             #Capitalize the class names
             labels = [item.capitalize() for item in self.label_encoder.classes_]
             #Calculate the confusion matrix
@@ -287,8 +290,8 @@ class Classifier:
 
 #MARK: Callback class
 class Callback(callbacks.Callback):
-    def __init__(self):
-        pass
+    # def __init__(self):
+    #     pass
         # self.test = 0
 
     #Increment the progress counter after each epoch
@@ -298,12 +301,8 @@ class Callback(callbacks.Callback):
         progress += 1
         # return super().on_epoch_end(epoch, logs)
 
+class CatCallback:
     def after_iteration(self, info):
         global progress
         progress += 1
-
-    #Incase the training is cancelled early, add to the progress so it doesn't break the program
-    # def on_train_end(self, logs=None):
-    #     global progress
-    #     progress = 
-        # return super().on_train_end(logs)
+        return True

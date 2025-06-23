@@ -18,6 +18,7 @@
 # Switch to requests lib for download progress callback?
 # Split models in classifier class, check it respective model is loaded before prediction
 # When changing the model, pack/unpack respective buttons with their own defaults
+# When model settings are shown, increase window height accordingly
 
 from constants import *
 import classifier
@@ -444,7 +445,7 @@ def readCSV(csv_path):
         print(READ_CSV_FAILED_MSG)
         mb.showerror(title="Failed to read file", message=READ_CSV_FAILED_MSG + f'\n{e}')
 
-#MARK: Save csv
+#MARK: Save CSV
 #Opens file dialog to choose the directory and name to save to
 def saveCSV():
     global already_saved
@@ -798,7 +799,7 @@ def trainModelHelper(result_list):
         if model_already_trained and not params_changed and not mb.askyesno(title="Train model again?", message=MODEL_ALREADY_TRAINED_MSG):
             #Abort the function call if the model has been trained and the answer is no
             return
-
+    #Invalid input
     except Exception as e:
         print(INVALID_INPUT_MSG)
         #Show a warning box if an input field contains invalid input
@@ -815,7 +816,7 @@ def trainModelHelper(result_list):
             test_accuracy, test_loss = c.trainModel()
         case "Cat Boost":
             #Cat boost doesn't build the model
-            test_accuracy, test_loss = c.trainModelCat(depth=6)
+            test_accuracy, test_loss = c.trainModelCat(depth=6, task_type="CPU")
     #In case the training is stopped early, add progress to avoid issues
     classifier.progress = epochs.get()
     #Set the new button state
@@ -877,6 +878,8 @@ def updateUI(key:str):
             save_model_button.config(state=NORMAL)
             #Unlock the show matrices button
             show_matrices_button.config(state=NORMAL)
+            #Lock the predict button until new data is loaded
+            predict_genre_button.config(state=DISABLED)
         case "prediction_started":
             #Lock the model buttons
             load_model_button.config(state=DISABLED)
@@ -1018,7 +1021,7 @@ root.title('Music Genre Classifier')
 root.minsize(width=400, height=224)
 root.geometry("425x280")
 
-c = classifier.Classifier()
+c = classifier.Classifier(patience=1000)
 file_path = StringVar(value="No files selected")
 file_paths = []
 new_paths = []
@@ -1032,6 +1035,7 @@ progress_text = StringVar()
 progress_number = StringVar()
 predicted_genres = StringVar()
 url = StringVar()
+#Variables for the dropdown menu
 model_type = StringVar(value="Neural Model")
 model_types = ["Neural Model", "Cat Boost"]
 append_path = BooleanVar(value=False)

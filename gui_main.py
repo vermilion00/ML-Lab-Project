@@ -1247,6 +1247,10 @@ try:
     model_available = True
 #No model found/malformed file
 except:
+    #Update the root window so the size change works
+    root.update()
+    #Show model options if no model is loaded at startup
+    updateUI("show_options")
     model_loaded_text.set("Model status:\n" + NO_MODEL_MSG)
     print("No model loaded")
 

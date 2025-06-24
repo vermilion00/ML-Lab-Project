@@ -734,7 +734,8 @@ def loadFileFromURL(url, segment):
         else:
             yt_options = {
                 "format": "bestaudio",
-                "outtmpl": "temp.wav",
+                "outtmpl": "temp",
+                "ffmpeg_location": f"{current_dir}\\ffmpeg\\bin\\",
                 "download_ranges": download_range_func(None, [(segment[0], segment[1])]),
                 "force_keyframes_at_cuts": True,
                 "progress_hooks": [ytUpdateHook],
@@ -761,7 +762,6 @@ def loadFileFromURL(url, segment):
             mb.showerror("Failed to load YouTube URL", message=f"Failed to load YouTube URL. Either the URL is invalid, or ffmpeg is not installed correctly and added to PATH.\n{e}")
     #Try using this easy implementation
     except:
-    # else:
         try:
             file = BytesIO(urlopen(url).read())
             hint_text.set("Download complete, loading File")
@@ -1060,15 +1060,15 @@ root.title('Music Genre Classifier')
 root.minsize(width=400, height=224)
 root.geometry("430x340")
 
-c = classifier.Classifier(patience=1000)
 c = classifier.Classifier(
-    learning_rate=0.0009,
-    epochs=1000,
+    learning_rate=0.00011,
+    epochs=300,
     test_size=0.2,
-    random_state=42,
-    batch_size=40,
+    random_state=111,
+    batch_size=20,
     patience=40
 )
+
 file_path = StringVar(value="No files selected")
 file_paths = []
 new_paths = []

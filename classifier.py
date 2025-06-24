@@ -5,7 +5,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, log_loss
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from keras import *
-from keras.api.layers import *
+# from keras.api.layers import *
+from keras.layers import *
 import joblib
 import matplotlib.pyplot as plt
 
@@ -83,7 +84,7 @@ class Classifier:
             model.add(Input(shape=(52,), batch_size=self.batch_size))
         model.add(Flatten())
         model.add(Dense(units=512, activation='relu'))
-        model.add(Dropout(rate=0.3))
+        # model.add(Dropout(rate=0.3))
         model.add(Dense(units=256, activation='relu'))
         # model.add(Dropout(rate=0.3))
         model.add(BatchNormalization())
@@ -99,6 +100,35 @@ class Classifier:
         print("Compiled Model")
         self.model = model
 
+    #MARK: Train Model
+    def trainModel(self):
+        #Define an early stopping callback to avoid wasting time training without progress
+        early_stopping = callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=self.patience,
+            restore_best_weights=True
+        )
+        #Fit the model with the parameters set in the gui
+        self.history = self.model.fit(
+                            x=self.x_train,
+                            y=self.y_train,
+                            epochs=self.epochs,
+                            batch_size=self.batch_size,
+                            validation_data=(self.x_test, self.y_test),
+                            # callbacks=[Callback()]
+                            callbacks=[Callback(), early_stopping]
+                        )
+        print("Fitted model")
+        #Run a test simulation to get an accuracy reading
+        #Assign the accuracy and loss values to be able to save them later
+        self.test_loss, self.test_acc = self.model.evaluate(self.x_test, self.y_test, verbose=1)
+        print(f'Test Accuracy: {self.test_acc*100:.2f}%')
+        print(f'Test Loss: {self.test_loss:.4f}')
+        #Generate the confusion matrices
+        self.generateMatrix("neural")
+        #Return the accuracy and loss values to display them in the gui
+        return self.test_acc, self.test_loss
+    
     #MARK: Train Cat
     def trainModelCat(self, depth=6, task_type="CPU"):
         global progress
@@ -133,35 +163,6 @@ class Classifier:
         #Set the progress to max in case of early stop
         progress = self.epochs
         #Return the accuracy and loss to display on the GUI
-        return self.test_acc, self.test_loss
-    
-    #MARK: Train Model
-    def trainModel(self):
-        #Define an early stopping callback to avoid wasting time training without progress
-        early_stopping = callbacks.EarlyStopping(
-            monitor='val_loss',
-            patience=self.patience,
-            restore_best_weights=True
-        )
-        #Fit the model with the parameters set in the gui
-        self.history = self.model.fit(
-                            x=self.x_train,
-                            y=self.y_train,
-                            epochs=self.epochs,
-                            batch_size=self.batch_size,
-                            validation_data=(self.x_test, self.y_test),
-                            # callbacks=[Callback()]
-                            callbacks=[Callback(), early_stopping]
-                        )
-        print("Fitted model")
-        #Run a test simulation to get an accuracy reading
-        #Assign the accuracy and loss values to be able to save them later
-        self.test_loss, self.test_acc = self.model.evaluate(self.x_test, self.y_test, verbose=1)
-        print(f'Test Accuracy: {self.test_acc*100:.2f}%')
-        print(f'Test Loss: {self.test_loss:.4f}')
-        #Generate the confusion matrices
-        self.generateMatrix("neural")
-        #Return the accuracy and loss values to display them in the gui
         return self.test_acc, self.test_loss
 
     #MARK: Predict Genre

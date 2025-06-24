@@ -1012,6 +1012,17 @@ def loadURL():
                 print(INVALID_SEGMENT_MSG)
                 mb.showerror(title="Invalid Segment", message=INVALID_SEGMENT_MSG)
 
+def updateSelection(event):
+    match model_type.get():
+        case "Neural Model":
+            learning_rate.set(DEFAULT_NEURAL["learning_rate"])
+            epochs.set(DEFAULT_NEURAL["epochs"])
+            # epochs_label.config(text="Epochs")
+        case "Cat Boost":
+            learning_rate.set(DEFAULT_CAT["learning_rate"])
+            epochs.set(DEFAULT_CAT["iterations"])
+            # epochs_label.config(text="Iterations")
+
 #MARK: Threading
 #Put long functions on a different thread so the GUI can update still
 thread1 = threading.Thread(target=thread1_handler, daemon=True)
@@ -1166,9 +1177,11 @@ dropdown = ttk.Combobox(options_frame,
                         values=model_types,
                         textvariable=model_type,
                         justify=CENTER,
+                        # validatecommand=updateSelection,
                         state='readonly')
 #Pre-select the default value
 dropdown.set(model_types[0])
+dropdown.bind('<<ComboboxSelected>>', updateSelection)
 dropdown.bind('<Enter>', lambda a: hint_text.set(HINT_TEXT["dropdown_box"]))
 dropdown.pack(side=LEFT, padx=2)
 #Call show matrix function from main thread

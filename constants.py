@@ -2,6 +2,21 @@ SAVE_DIR = ".temp_classifier"
 SAVE_FILE = SAVE_DIR + "/" + "features.csv"
 FORBIDDEN_CHARS = r'[\\/:*?"<>|]' #Not allowed in windows file names
 
+DEFAULT_NEURAL = {
+    "learning_rate": 0.0009,
+    "epochs": 1000,
+    "test_size": 0.1,
+    "batch_size": 20,
+    "random_state": 111
+}
+DEFAULT_CAT = {
+    "learning_rate": 0.1,
+    "iterations": 300,
+    "test_size": 0.1,
+    "batch_size": 20,
+    "random_state": 111
+}
+
 HINT_TEXT = {
     "program_start": "Hover over an element to see an explanation.",
     "program_start_long": "If you have a model file placed in the default directory, it will be loaded at program start. To train a model, either load and extract features from audio files or select a pre-extracted feature file, then click \"Train model\". To classify audio, you need to have a model loaded. Select the audio files and extract their features before predicting their genre.",

@@ -10,5 +10,6 @@ pip install catboost
 pip install matplotlib  
 pip install scikit-learn  
 pip install keras   
+pip install tensorflow  
 
 To be able to open files other than [.wav .mp3 .flac .ogg .mat], ffmpeg needs to be installed and added to the path.

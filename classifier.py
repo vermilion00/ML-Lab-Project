@@ -71,16 +71,15 @@ class Classifier:
         self.used_slow_features = use_slow_features
         print("Prepared Data")
 
-
-    #MARK: Build Neural
+    # MARK: Build Neural
     def buildModel(self):
         model = Sequential()
         #Input shape is 57, since the table has 60 columns and we dropped 3
-        if self.used_slow_features:
-            model.add(Input(shape=(57,), batch_size=self.batch_size))
-        else:
-            #Since we also dropped harmony, perceptr and tempo, we use 52 features
-            model.add(Input(shape=(52,), batch_size=self.batch_size))
+        # if self.used_slow_features:
+        model.add(Input(shape=(self.x_train.shape[1],), batch_size=self.batch_size))
+        # else:
+        #     #Since we also dropped harmony, perceptr and tempo, we use 52 features
+        #     model.add(Input(shape=(52,), batch_size=self.batch_size))
         model.add(Flatten())
         model.add(Dense(units=512, activation='relu'))
         model.add(Dropout(rate=0.3))
@@ -97,7 +96,7 @@ class Classifier:
             metrics=['accuracy']
             )
         print("Compiled Model")
-        self.model = model
+        self.model = model    
 
     #MARK: Build LSTM
     def buildModelLSTM(self):
@@ -105,7 +104,6 @@ class Classifier:
         self.patience = self.epochs/2
         #Input shape is 57, since the table has 60 columns and we dropped 3
         if self.used_slow_features:
-            # model.add(Input(shape=(57,), batch_size=self.batch_size))
             model.add(Input(shape=(self.x_train.shape[1], 1), batch_size=self.batch_size))
         else:
             #Since we also dropped harmony, perceptr and tempo
@@ -171,7 +169,7 @@ class Classifier:
                     depth=depth,
                     eval_metric='Accuracy',
                     loss_function='MultiClass',
-                    # early_stopping_rounds=self.epochs/5,
+                    early_stopping_rounds=200,
                     task_type=task_type
                 )
         if task_type == "CPU":

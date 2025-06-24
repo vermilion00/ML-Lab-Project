@@ -423,7 +423,6 @@ def readCSV(csv_path):
             line_count = 0
             for row in csv_reader:
                 #Basic check if csv is formed correctly
-                #TODO: Implement more checks
                 if len(row) != len(HEADER):
                     print(MALFORMED_CSV_MSG)
                     mb.showerror(title="Malformed CSV", message=MALFORMED_CSV_MSG)
@@ -542,7 +541,7 @@ def loadModelHelper():
             #Set the model_available flag
             model_available = True
             updateUI("loaded_model")
-            model_loaded_text.set(f"Model status:\nLoaded model \"{file_path_str}\"")
+            model_loaded_text.set(f"Model status:\nLoaded model \"{file_path_str}\"\nTest Accuracy: {c.test_acc*100:.2f}%, Test Loss: {c.test_loss:.4f}")
             hint_text.set(f"Loaded model \"{file_path_str}\"")
         except Exception as e:
             print("Failed to load model")
@@ -711,7 +710,6 @@ def ytUpdateHook(download):
             break
     #Save the progress as an int
     download_progress = floor(float(value.replace(' ', '')))
-
 
 #MARK: Load File URL
 def loadFileFromURL(url, segment):
@@ -1294,5 +1292,12 @@ except:
     updateUI("show_options")
     model_loaded_text.set("Model status:\n" + NO_MODEL_MSG)
     print("No model loaded")
+    try:
+        #If no model is loaded, try to pre-load feature csv
+        readCSV(f"{current_dir}/features/features_30_sec.csv")
+        file_path.set(f"{current_dir}/features/features_30_sec.csv")
+        print("CSV pre-loaded")
+    except:
+        pass
 
 root.mainloop()

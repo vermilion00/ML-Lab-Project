@@ -10,15 +10,12 @@
 # Add button to save new default parameters
 #
 # Fixes to bug:
-# - Calls to their functions take too long
 # Program crashes if the first three progress += 1 calls happen too fast
 # Speed up startup somehow
 # Separate first x songs from each class out for testing (first 2 of each?)
 # Add message showing which ones belong there
 # Switch to requests lib for download progress callback?
-# Split models in classifier class, check it respective model is loaded before prediction
-# When changing the model, pack/unpack respective buttons with their own defaults
-# When model settings are shown, increase window height accordingly
+# Separate models in classifier class, check if respective model is loaded before prediction
 
 from constants import *
 import classifier
@@ -34,13 +31,17 @@ import csv
 import librosa
 from librosa import feature, effects, beat
 from glob import glob
-from os import path, remove
+import os
 from sys import argv
+#Get the current execution path
+current_dir = os.path.dirname(os.path.abspath(argv[0]))
 from urllib.request import urlopen
 from io import BytesIO
 from pydub import AudioSegment
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import download_range_func
+from yt_dlp.postprocessor import FFmpegPostProcessor
+FFmpegPostProcessor._ffmpeg_location.set(f'{current_dir}\\ffmpeg\\bin')
 from math import floor
 
 #MARK: Threading events
@@ -158,6 +159,8 @@ def thread1_handler():
                     predicted_genres.set(c.predictGenre(result_list, "neural", used_slow_features))
                 case "Cat Boost":
                     predicted_genres.set(c.predictGenre(result_list, "cat", used_slow_features))
+                case "LSTM Model":
+                    predicted_genres.set(c.predictGenre(result_list, "lstm", used_slow_features))
             updateUI("prediction_finished")
         elif save_model_flag.is_set():
             save_model_flag.clear()
@@ -719,8 +722,13 @@ def loadFileFromURL(url, segment):
         if segment == None:
             yt_options = {
                 "format": "bestaudio",
-                "outtmpl": "temp.wav",
-                "progress_hooks": [ytUpdateHook]
+                "outtmpl": "temp",
+                "ffmpeg_location": f"{current_dir}\\ffmpeg\\bin\\",
+                "progress_hooks": [ytUpdateHook],
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "wav"
+                }]
             }
         #If a segment is specified, download only that portion
         else:
@@ -729,17 +737,26 @@ def loadFileFromURL(url, segment):
                 "outtmpl": "temp.wav",
                 "download_ranges": download_range_func(None, [(segment[0], segment[1])]),
                 "force_keyframes_at_cuts": True,
-                "progress_hooks": [ytUpdateHook]
+                "progress_hooks": [ytUpdateHook],
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "wav"
+                }]
             }
         try:
             #TODO: Try saving to BytesIO directly - Need to find out how to reencode the file from bytesIO
             with YoutubeDL(yt_options) as audio:
                 audio.download([url])
                 hint_text.set("Download complete, loading File")
-            y, sr = librosa.load('temp.wav', sr=None)
+                y, sr = librosa.load('temp.wav', sr=None)
             #Remove the temp file after loading it
-            remove('temp.wav')
+            os.remove('temp.wav')
         except Exception as e:
+            try:
+                #If the audio has been downloaded, remove it
+                os.remove('temp.wav')
+            except:
+                pass
             print(f"Failed to load YouTube URL.\n{e}")
             mb.showerror("Failed to load YouTube URL", message=f"Failed to load YouTube URL. Either the URL is invalid, or ffmpeg is not installed correctly and added to PATH.\n{e}")
     #Try using this easy implementation
@@ -812,11 +829,16 @@ def trainModelHelper(result_list):
         case "Neural Model":
             #Build the model
             c.buildModel()
+            #Set the patience variable
+            c.patience = c.epochs/2
             #Train the model
             test_accuracy, test_loss = c.trainModel()
         case "Cat Boost":
             #Cat boost doesn't build the model
             test_accuracy, test_loss = c.trainModelCat(depth=6, task_type="CPU")
+        case "LSTM Model":
+            c.buildModelLSTM()
+            test_accuracy, test_loss = c.trainModel()
     #In case the training is stopped early, add progress to avoid issues
     classifier.progress = epochs.get()
     #Set the new button state
@@ -1039,6 +1061,14 @@ root.minsize(width=400, height=224)
 root.geometry("430x340")
 
 c = classifier.Classifier(patience=1000)
+c = classifier.Classifier(
+    learning_rate=0.0009,
+    epochs=1000,
+    test_size=0.2,
+    random_state=42,
+    batch_size=40,
+    patience=40
+)
 file_path = StringVar(value="No files selected")
 file_paths = []
 new_paths = []
@@ -1054,7 +1084,7 @@ predicted_genres = StringVar()
 url = StringVar()
 #Variables for the dropdown menu
 model_type = StringVar(value="Neural Model")
-model_types = ["Neural Model", "Cat Boost"]
+model_types = ["Neural Model", "Cat Boost", "LSTM Model"]
 append_path = BooleanVar(value=False)
 use_slow_features = BooleanVar(value=True)
 used_slow_features = use_slow_features.get()
@@ -1074,7 +1104,6 @@ epochs = IntVar(value=c.epochs)
 test_size = DoubleVar(value=c.test_size)
 batch_size = IntVar(value=c.batch_size)
 random_state = IntVar(value=c.random_state)
-current_dir = path.dirname(path.abspath(argv[0]))
 
 #MARK: Buttons
 button_helper_frame = ttk.Frame(root, padding="0 2 0 2")

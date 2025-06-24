@@ -23,8 +23,8 @@ progress = 0
 class Classifier:
     #MARK: Init
     #High epoch amount is fine since early stopping is available
-    def __init__(self, learning_rate=0.0009, epochs=1000, test_size=0.1, random_state=42, batch_size=40, patience=40):
-    # def __init__(self, learning_rate=0.00011, epochs=300, test_size=0.1, random_state=111, batch_size=20, patience=40):
+    # def __init__(self, learning_rate=0.0009, epochs=1000, test_size=0.2, random_state=42, batch_size=40, patience=40):
+    def __init__(self, learning_rate=0.00011, epochs=300, test_size=0.2, random_state=111, batch_size=20, patience=40):
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.test_size = test_size
@@ -65,7 +65,6 @@ class Classifier:
         x = pd.DataFrame(scaled_data, columns=columns)
         #Split the model into training and testing data
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=self.test_size, random_state=self.random_state)
-        #TODO: What does this do?
         # x_train.shape, x_test.shape, y_train.shape, y_test.shape
         #Assign the split data to the model variables
         self.x_train, self.x_test, self.y_train, self.y_test = x_train, x_test, y_train, y_test
@@ -80,16 +79,45 @@ class Classifier:
         if self.used_slow_features:
             model.add(Input(shape=(57,), batch_size=self.batch_size))
         else:
-            #Since we also dropped harmony, perceptr and tempo
+            #Since we also dropped harmony, perceptr and tempo, we use 52 features
             model.add(Input(shape=(52,), batch_size=self.batch_size))
         model.add(Flatten())
         model.add(Dense(units=512, activation='relu'))
-        # model.add(Dropout(rate=0.3))
+        model.add(Dropout(rate=0.3))
         model.add(Dense(units=256, activation='relu'))
-        # model.add(Dropout(rate=0.3))
+        model.add(Dropout(rate=0.3))
         model.add(BatchNormalization())
         model.add(Dense(units=128, activation='tanh'))
         model.add(Dropout(rate=0.3))
+        model.add(Dense(units=10, activation='softmax'))
+        #Compile the model
+        model.compile(
+            optimizer=optimizers.Adam(learning_rate=self.learning_rate),
+            loss=losses.SparseCategoricalCrossentropy(),
+            metrics=['accuracy']
+            )
+        print("Compiled Model")
+        self.model = model
+
+    #MARK: Build LSTM
+    def buildModelLSTM(self):
+        model = Sequential()
+        self.patience = self.epochs/2
+        #Input shape is 57, since the table has 60 columns and we dropped 3
+        if self.used_slow_features:
+            # model.add(Input(shape=(57,), batch_size=self.batch_size))
+            model.add(Input(shape=(self.x_train.shape[1], 1), batch_size=self.batch_size))
+        else:
+            #Since we also dropped harmony, perceptr and tempo
+            model.add(Input(shape=(self.x_train.shape[1], 1), batch_size=self.batch_size))
+        # model.add(Flatten())
+        # model.add(LSTM(units=512, activation='relu'))
+        # model.add(Dropout(rate=0.3))
+        model.add(LSTM(units=128, return_sequences=True))
+        model.add(Dropout(rate=0.2))
+        # model.add(BatchNormalization())
+        model.add(LSTM(units=128))
+        model.add(Dropout(rate=0.2))
         model.add(Dense(units=10, activation='softmax'))
         #Compile the model
         model.compile(
@@ -143,7 +171,7 @@ class Classifier:
                     depth=depth,
                     eval_metric='Accuracy',
                     loss_function='MultiClass',
-                    early_stopping_rounds=self.epochs/5,
+                    # early_stopping_rounds=self.epochs/5,
                     task_type=task_type
                 )
         if task_type == "CPU":
@@ -190,10 +218,10 @@ class Classifier:
             for song_data in stripped_data:
                 #Make the prediction
                 match model_type:
-                    case "neural":
-                        prediction = self.model.predict(song_data)[0]
                     case "cat":
                         prediction = self.model.predict(song_data, prediction_type="Probability")[0]
+                    case _:
+                        prediction = self.model.predict(song_data)[0]
                 #Combine the prediction with the corresponding class
                 result = list(zip(self.label_encoder.classes_, prediction))
                 #Sort the list so that the highest probability is first

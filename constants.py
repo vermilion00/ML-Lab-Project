@@ -48,7 +48,7 @@ HINT_TEXT = {
     "url_entry": "Input the url to a sound file to load it directly. You can specify a segment using this format [1.5,30], separated from the URL by a space.",
     "load_url_button": "Click the load the audio from the URL in the entry field.",
     "dropdown_box": "Select the classifier you wish to train.",
-    "slow_features_box": "Choose whether you want to use slow features like harmony, perceptr and tempo.",
+    "slow_features_box": "Choose whether you want to use slow features like harmony, perceptr and tempo. Using them will make the extraction progress take ~3-8x as long. Models can only predict songs that were extracted with the same setting.",
     "show_matrix_button": "Click to see the confusion matrix of the currently selected model."
 }
 

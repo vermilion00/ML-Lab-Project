@@ -16,6 +16,7 @@
 # Add message showing which ones belong there
 # Switch to requests lib for download progress callback?
 # Separate models in classifier class, check if respective model is loaded before prediction
+# Change use slow features to show warning that extracting slow features is possible, but the prediction will just not use them
 
 from constants import *
 import classifier
@@ -567,7 +568,7 @@ def startExtraction(source="file", segment=None):
     if new_paths != []:
         #If the slow feature option is mismatched between the model and the current setting,
         #ask if it should be changed before extracting
-        if use_slow_features.get() != c.used_slow_features:
+        if use_slow_features.get() != c.used_slow_features and c.used_slow_features != None:
             if c.used_slow_features == True:
                 answer = mb.askyesnocancel(title="Options Mismatch", message=OPTION_MISMATCH_1_MSG)
             else:
@@ -596,6 +597,7 @@ def startExtraction(source="file", segment=None):
                     except:
                         #If librosa can't open the file, try resampling it to wav first (needs ffmpeg)
                         try:
+                            #HINT MSG
                             #Resample to wav
                             wav = BytesIO
                             AudioSegment.from_file(i).export(wav, 'wav')
@@ -710,82 +712,70 @@ def ytUpdateHook(download):
     #Save the progress as an int
     download_progress = floor(float(value.replace(' ', '')))
 
+
 #MARK: Load File URL
 def loadFileFromURL(url, segment):
     global total_progress
     #Set the total progress here to avoid crashing the program when loading small files
     total_progress = 100
     #Load audio from url
-    #If url is a youtube link, use yt-dlp
-    # if ".youtu.be" in url or ".youtube." in url:
-    try:
-        if segment == None:
-            yt_options = {
-                "format": "bestaudio",
-                "outtmpl": "temp",
-                "ffmpeg_location": f"{current_dir}\\ffmpeg\\bin\\",
-                "progress_hooks": [ytUpdateHook],
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "wav"
-                }]
-            }
-        #If a segment is specified, download only that portion
-        else:
-            yt_options = {
-                "format": "bestaudio",
-                "outtmpl": "temp",
-                "ffmpeg_location": f"{current_dir}\\ffmpeg\\bin\\",
-                "download_ranges": download_range_func(None, [(segment[0], segment[1])]),
-                "force_keyframes_at_cuts": True,
-                "progress_hooks": [ytUpdateHook],
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "wav"
-                }]
-            }
-        try:
-            #TODO: Try saving to BytesIO directly - Need to find out how to reencode the file from bytesIO
-            with YoutubeDL(yt_options) as audio:
-                audio.download([url])
-                hint_text.set("Download complete, loading File")
-                y, sr = librosa.load('temp.wav', sr=None)
-            #Remove the temp file after loading it
-            os.remove('temp.wav')
-        except Exception as e:
-            try:
-                #If the audio has been downloaded, remove it
-                os.remove('temp.wav')
-            except:
-                pass
-            print(f"Failed to load YouTube URL.\n{e}")
-            mb.showerror("Failed to load YouTube URL", message=f"Failed to load YouTube URL. Either the URL is invalid, or ffmpeg is not installed correctly and added to PATH.\n{e}")
-    #Try using this easy implementation
-    except:
+    #If it's a youtube link, skip the first method
+    if not (".youtu.be" in url or ".youtube." in url):
         try:
             file = BytesIO(urlopen(url).read())
             hint_text.set("Download complete, loading File")
-        except Exception as e:
-            print(f"URL failed to load.\n{e}")
-            mb.showerror(title="Failed to load URL", message=f"The URL failed to load.\n{e}")
-        #Load the features from a bytes object
+        except:
+            pass
         try:
             y, sr = librosa.load(file)
+            return y, sr
         except:
-            #If librosa can't open the file, try resampling it to wav first (needs ffmpeg)
-            try:
-                #Resample to wav
-                wav = BytesIO
-                with urlopen(url) as request:
-                    request.seek = lambda *args: None
-                    AudioSegment.from_file(request).export(wav, "wav")
-                wav.seek(0)
-                hint_text.set("Download complete, loading File")
-                y, sr = librosa.load(wav, sr=None)
-            except Exception as e:
-                print(f"Failed to load file.\n{e}")
-                mb.showerror(title="Failed to load file.", message=f"The file {url} failed to load. Make sure the format is one of [.wav, .mp3, .flac, .ogg]. For extended file support, e.g. YouTube, make sure that ffmpeg is installed correctly.\n{e}")
-    return y, sr
+            #If librosa can't open the file, try using yt_dlp
+            pass
+    #If it's a youtube link or the file couldn't be loaded, try yt_dlp
+    if segment == None:
+        yt_options = {
+            "format": "bestaudio",
+            "outtmpl": "temp",
+            "ffmpeg_location": f"{current_dir}\\ffmpeg\\bin\\",
+            "progress_hooks": [ytUpdateHook],
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "wav"
+            }]
+        }
+    #If a segment is specified, download only that portion
+    else:
+        yt_options = {
+            "format": "bestaudio",
+            "outtmpl": "temp",
+            "ffmpeg_location": f"{current_dir}\\ffmpeg\\bin\\",
+            "download_ranges": download_range_func(None, [(segment[0], segment[1])]),
+            "force_keyframes_at_cuts": True,
+            "progress_hooks": [ytUpdateHook],
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "wav"
+            }]
+        }
+    try:
+        #TODO: Try saving to BytesIO directly - Need to find out how to reencode the file from bytesIO
+        with YoutubeDL(yt_options) as audio:
+            audio.download([url])
+            hint_text.set("Download complete, re-encoding file to wav")
+            y, sr = librosa.load('temp.wav', sr=None)
+        #Remove the temp file after loading it
+        os.remove('temp.wav')
+        return y, sr
+    except Exception as e:
+        try:
+            #If the audio has been downloaded, remove it
+            os.remove('temp.wav')
+        except:
+            pass
+        print(f"Failed to load URL.\n{e}")
+        mb.showerror("Failed to load URL", message=f"Failed to load the URL. Either the URL is invalid, or the file is corrupted.\n{e}")
+    return None
 
 #MARK: Train Model
 def trainModelHelper(result_list):
@@ -824,7 +814,10 @@ def trainModelHelper(result_list):
         #Abort the function call
         return
     #Prep the data
-    c.prepareData(result_list, use_slow_features=used_slow_features)
+    try:
+        c.prepareData(result_list, use_slow_features=used_slow_features)
+    except Exception as e:
+        print(f"Invalid Dataset size\n{e}")
     match model_type.get():
         case "Neural Model":
             #Build the model
@@ -960,6 +953,12 @@ def updateUI(key:str):
             #If the selected files have been extracted, unlock predict genre button
             if already_extracted:
                 predict_genre_button.config(state=NORMAL)
+        case "re-encoding_audio":
+            hint_label.pack_forget()
+            progress_frame.pack()
+            progress_frame.pack(side=BOTTOM, padx=2, pady=(0,2), fill=X)
+            progress_number.set("")
+            progress_text.set("Re-encoding Audio")
         case "show_options":
             #Hide the show advanced button
             show_advanced_button.pack_forget()

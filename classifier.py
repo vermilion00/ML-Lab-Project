@@ -23,7 +23,6 @@ progress = 0
 class Classifier:
     #MARK: Init
     #High epoch amount is fine since early stopping is available
-    # def __init__(self, learning_rate=0.0009, epochs=1000, test_size=0.2, random_state=42, batch_size=40, patience=40):
     def __init__(self, learning_rate=0.00011, epochs=300, test_size=0.2, random_state=111, batch_size=20, patience=40):
         self.learning_rate = learning_rate
         self.epochs = epochs
@@ -65,7 +64,6 @@ class Classifier:
         x = pd.DataFrame(scaled_data, columns=columns)
         #Split the model into training and testing data
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=self.test_size, random_state=self.random_state)
-        # x_train.shape, x_test.shape, y_train.shape, y_test.shape
         #Assign the split data to the model variables
         self.x_train, self.x_test, self.y_train, self.y_test = x_train, x_test, y_train, y_test
         self.used_slow_features = use_slow_features
@@ -317,18 +315,13 @@ class Classifier:
 
 #MARK: Callback class
 class Callback(callbacks.Callback):
-    # def __init__(self):
-    #     pass
-        # self.test = 0
-
     #Increment the progress counter after each epoch
     def on_epoch_end(self, epoch, logs=None):
-        # self.progress += 1
         global progress
         progress += 1
-        # return super().on_epoch_end(epoch, logs)
 
 class CatCallback:
+    #Increment the progress counter after each epoch
     def after_iteration(self, info):
         global progress
         progress += 1

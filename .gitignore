@@ -3,6 +3,7 @@
 !constants.py
 !gui_main.py
 !README.md
-!.gitignore
 !features
 !ffmpeg
+!training_confusion_matrix.png
+!testing_confusion_matrix.png

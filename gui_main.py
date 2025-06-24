@@ -993,7 +993,6 @@ def setWraplength(event, label=None):
 
 #MARK: Load URL
 def loadURL():
-    #TODO: Bring this in line with other functions
     global new_paths
     global paths
     #Check if the entry field contains text

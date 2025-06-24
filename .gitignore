@@ -7,3 +7,4 @@
 !ffmpeg
 !training_confusion_matrix.png
 !testing_confusion_matrix.png
+!model.keras
